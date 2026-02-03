@@ -93,3 +93,6 @@ interface DownloadButtonsProps {
 - ✅ `npx tsc --noEmit` passes with no errors
 - ✅ Strict type checking enabled
 - ✅ Proper React hooks typing
+## E2E Testing with Playwright MCP
+- Documented E2E test scenarios for AI-driven testing using Playwright MCP.
+- Created a synthetic audio generation script to avoid copyright issues during testing.
