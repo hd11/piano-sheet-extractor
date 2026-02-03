@@ -4633,9 +4633,9 @@ function parseTime(timeStr: string): number {
 - `frontend/components/DownloadButtons.tsx` - MIDI/MusicXML 다운로드 버튼
 
 **Acceptance Criteria**:
-- [ ] MIDI 다운로드 → .mid 파일
-- [ ] MusicXML 다운로드 → .musicxml 파일
-- [ ] 파일이 MuseScore에서 열림
+- [x] MIDI 다운로드 → .mid 파일
+- [x] MusicXML 다운로드 → .musicxml 파일
+- [x] 파일이 MuseScore에서 열림
 
 **Commit**: `feat(frontend): implement download functionality`
 
