@@ -9,7 +9,7 @@ from enum import Enum
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from backend.core.job_manager import JOB_STORAGE_PATH, get_job
+from core.job_manager import JOB_STORAGE_PATH, get_job
 
 router = APIRouter(prefix="/api", tags=["download"])
 

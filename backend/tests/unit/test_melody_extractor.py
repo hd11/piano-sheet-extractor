@@ -4,7 +4,7 @@
 
 import pytest
 from pathlib import Path
-from backend.core.melody_extractor import (
+from core.melody_extractor import (
     Note,
     apply_skyline,
     filter_short_notes,

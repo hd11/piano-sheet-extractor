@@ -6,7 +6,7 @@ GET /api/status/{job_id} - Get current job status and progress.
 
 from fastapi import APIRouter, HTTPException
 
-from backend.core.job_manager import get_job
+from core.job_manager import get_job
 
 router = APIRouter(prefix="/api", tags=["status"])
 

@@ -23,7 +23,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import pretty_midi
 
-from backend.core.progress import calculate_progress
+from core.progress import calculate_progress
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +317,7 @@ def _process_job_sync(job_id: str) -> None:
         # Stage 1: YouTube download (if source=youtube)
         if job["source"] == "youtube":
             update_job_status(job_id, JobStatus.PROCESSING, 0, "YouTube 다운로드 중")
-            from backend.core.youtube_downloader import download_youtube_audio
+            from core.youtube_downloader import download_youtube_audio
 
             audio_path = download_youtube_audio(
                 job["metadata"]["url"],
@@ -337,14 +337,14 @@ def _process_job_sync(job_id: str) -> None:
 
         # Stage 2: Audio → MIDI (Basic Pitch)
         update_job_status(job_id, JobStatus.PROCESSING, 20, "Basic Pitch 변환 중")
-        from backend.core.audio_to_midi import convert_audio_to_midi
+        from core.audio_to_midi import convert_audio_to_midi
 
         midi_result = convert_audio_to_midi(audio_path, job_dir / "full.mid")
         update_job_status(job_id, JobStatus.PROCESSING, 50, "Basic Pitch 완료")
 
         # Stage 3: Melody extraction (Skyline)
         update_job_status(job_id, JobStatus.PROCESSING, 50, "멜로디 추출 중")
-        from backend.core.melody_extractor import extract_melody
+        from core.melody_extractor import extract_melody
 
         melody_notes = extract_melody(job_dir / "full.mid")
 
@@ -357,7 +357,7 @@ def _process_job_sync(job_id: str) -> None:
 
         # Stage 4: Analysis (BPM/Key/Chords)
         update_job_status(job_id, JobStatus.PROCESSING, 60, "음악 분석 중")
-        from backend.core.audio_analysis import analyze_audio
+        from core.audio_analysis import analyze_audio
 
         analysis = analyze_audio(audio_path)
 
@@ -371,7 +371,7 @@ def _process_job_sync(job_id: str) -> None:
 
         # Stage 5: Sheet generation (MusicXML)
         update_job_status(job_id, JobStatus.GENERATING, 70, "악보 생성 중")
-        from backend.core.difficulty_adjuster import generate_all_sheets
+        from core.difficulty_adjuster import generate_all_sheets
 
         sheets = generate_all_sheets(job_dir, melody_path, analysis)
         logger.info(f"Generated sheets: {list(sheets.keys())}")
@@ -446,13 +446,13 @@ def _regenerate_sheets_sync(job_id: str, analysis: Dict[str, Any]) -> None:
         )
         return
 
-    from backend.core.difficulty_adjuster import (
+    from core.difficulty_adjuster import (
         add_chord_symbols,
         adjust_difficulty,
         write_file_atomic,
     )
-    from backend.core.midi_parser import parse_midi
-    from backend.core.midi_to_musicxml import notes_to_stream, stream_to_musicxml
+    from core.midi_parser import parse_midi
+    from core.midi_to_musicxml import notes_to_stream, stream_to_musicxml
 
     # Load melody notes
     notes = parse_midi(melody_path)

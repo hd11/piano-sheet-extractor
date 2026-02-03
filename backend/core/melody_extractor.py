@@ -6,7 +6,7 @@
 
 from pathlib import Path
 from typing import List
-from backend.core.midi_parser import Note, parse_midi
+from core.midi_parser import Note, parse_midi
 
 
 def apply_skyline(notes: List[Note]) -> List[Note]:

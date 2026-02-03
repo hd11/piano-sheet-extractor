@@ -9,8 +9,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.job_manager import create_job, process_job_async
-from backend.core.youtube_downloader import (
+from core.job_manager import create_job, process_job_async
+from core.youtube_downloader import (
     MAX_DURATION_SECONDS,
     get_video_info,
     validate_youtube_url,

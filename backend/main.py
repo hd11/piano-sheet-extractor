@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import (
+from api import (
     upload_router,
     youtube_router,
     status_router,

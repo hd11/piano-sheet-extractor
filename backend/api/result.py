@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.job_manager import (
+from core.job_manager import (
     JobStatus,
     get_job,
     handle_put_regeneration,

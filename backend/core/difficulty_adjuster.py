@@ -22,8 +22,8 @@ from typing import Dict, List
 
 import music21
 
-from backend.core.midi_parser import Note, parse_midi
-from backend.core.midi_to_musicxml import (
+from core.midi_parser import Note, parse_midi
+from core.midi_to_musicxml import (
     notes_to_stream,
     seconds_to_quarter_length,
     stream_to_musicxml,

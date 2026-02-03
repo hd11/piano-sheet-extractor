@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from backend.core.job_manager import (
+from core.job_manager import (
     JOB_STORAGE_PATH,
     create_job,
     process_job_async,

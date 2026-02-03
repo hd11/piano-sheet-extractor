@@ -14,7 +14,7 @@ from typing import List
 
 import music21
 
-from backend.core.midi_parser import Note
+from core.midi_parser import Note
 
 
 def seconds_to_quarter_length(seconds: float, bpm: float) -> float:
@@ -95,7 +95,7 @@ def notes_to_stream(
         - 셋잇단음표는 제외됩니다 (단순화 목적)
 
     Example:
-        >>> from backend.core.midi_parser import Note
+        >>> from core.midi_parser import Note
         >>> notes = [
         ...     Note(pitch=60, onset=0.0, duration=0.5, velocity=100),
         ...     Note(pitch=62, onset=0.5, duration=0.5, velocity=100),
@@ -189,7 +189,7 @@ def notes_to_musicxml(
         str - MusicXML 형식의 문자열
 
     Example:
-        >>> from backend.core.midi_parser import Note
+        >>> from core.midi_parser import Note
         >>> notes = [Note(pitch=60, onset=0.0, duration=0.5, velocity=100)]
         >>> musicxml_str = notes_to_musicxml(notes, bpm=120, key="C major")
         >>> '<?xml' in musicxml_str
