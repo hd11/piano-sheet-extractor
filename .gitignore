@@ -44,10 +44,6 @@ dist/
 .env.local
 .env.*.local
 
-# Job storage (golden test data)
-tests/golden/data/
-backend/tests/golden/data/
-
 # Temporary files
 *.tmp
 *.temp

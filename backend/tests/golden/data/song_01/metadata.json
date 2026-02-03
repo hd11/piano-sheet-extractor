@@ -1,0 +1,9 @@
+{
+  "title": "Golden",
+  "artist": "Unknown",
+  "genre": "Pop",
+  "duration_seconds": 180,
+  "has_reference": true,
+  "source": "manual_transcription",
+  "notes": "테스트 곡 1"
+}
