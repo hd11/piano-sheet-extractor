@@ -37,7 +37,20 @@ class TestGoldenSmoke:
             assert audio_file.exists(), f"Test file not found: {audio_file}"
             assert audio_file.stat().st_size > 0, f"Test file is empty: {audio_file}"
 
-    @pytest.mark.parametrize("audio_file", pytest.lazy_fixture("test_audio_files"))
+    @pytest.mark.parametrize(
+        "audio_file",
+        [
+            Path("/app/test/Golden.mp3"),
+            Path("/app/test/IRIS OUT.mp3"),
+            Path("/app/test/꿈의 버스.mp3"),
+            Path("/app/test/너에게100퍼센트.mp3"),
+            Path("/app/test/달리 표현할 수 없어요.mp3"),
+            Path("/app/test/등불을 지키다.mp3"),
+            Path("/app/test/비비드라라러브.mp3"),
+            Path("/app/test/여름이었다.mp3"),
+        ],
+        ids=lambda p: p.name,
+    )
     def test_full_pipeline_smoke(self, audio_file, job_storage_path):
         """
         전체 파이프라인 Smoke 테스트

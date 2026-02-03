@@ -10,7 +10,8 @@ services:
     environment:
       - JOB_STORAGE_PATH=/tmp/piano-sheet-jobs
     volumes:
-      - job-data:/tmp/piano-sheet-jobs
+       - job-data:/tmp/piano-sheet-jobs
+       - ./test:/app/test
     deploy:
       resources:
         limits:

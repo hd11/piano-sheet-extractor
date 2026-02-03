@@ -10,6 +10,22 @@ import time
 from pathlib import Path
 from typing import Dict, Any
 
+# Fix scipy compatibility issue with basic-pitch and librosa
+# scipy 1.17+ moved window functions to scipy.signal.windows
+import scipy.signal
+import scipy.signal.windows as windows
+
+if not hasattr(scipy.signal, "gaussian"):
+    scipy.signal.gaussian = windows.gaussian
+if not hasattr(scipy.signal, "hann"):
+    scipy.signal.hann = windows.hann
+if not hasattr(scipy.signal, "hamming"):
+    scipy.signal.hamming = windows.hamming
+if not hasattr(scipy.signal, "blackman"):
+    scipy.signal.blackman = windows.blackman
+if not hasattr(scipy.signal, "bartlett"):
+    scipy.signal.bartlett = windows.bartlett
+
 from basic_pitch.inference import predict
 from basic_pitch import ICASSP_2022_MODEL_PATH
 
@@ -72,7 +88,18 @@ def convert_audio_to_midi(audio_path: Path, output_path: Path) -> Dict[str, Any]
 
         # Calculate metadata
         note_count = len(note_events) if note_events is not None else 0
-        duration_seconds = model_output.shape[0] / 50.0  # Basic Pitch outputs at 50Hz
+
+        # Handle both old and new basic-pitch API
+        # Newer versions return a dict, older versions return an array
+        if isinstance(model_output, dict):
+            # New API: model_output is a dict with keys like 'contour', 'onset', 'frame'
+            # Use MIDI data duration as fallback
+            duration_seconds = midi_data.get_end_time()
+        else:
+            # Old API: model_output is an array
+            duration_seconds = (
+                model_output.shape[0] / 50.0
+            )  # Basic Pitch outputs at 50Hz
 
         logger.info(
             f"Conversion complete: {note_count} notes, "

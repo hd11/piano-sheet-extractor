@@ -144,12 +144,27 @@ def add_chord_symbols(
     """
     for chord_info in chords:
         offset_ql = seconds_to_quarter_length(chord_info["time"], bpm)
+        chord_str = chord_info["chord"]
 
-        # Create music21 ChordSymbol
-        cs = music21.harmony.ChordSymbol(chord_info["chord"])
-        cs.offset = offset_ql
+        # Skip invalid chord symbols
+        if not chord_str or len(chord_str) == 0:
+            continue
 
-        stream.insert(offset_ql, cs)
+        # Validate chord starts with a valid root note (A-G)
+        if chord_str[0].upper() not in "ABCDEFG":
+            continue
+
+        try:
+            # Create music21 ChordSymbol
+            cs = music21.harmony.ChordSymbol(chord_str)
+            cs.offset = offset_ql
+            stream.insert(offset_ql, cs)
+        except Exception as e:
+            # Skip chords that can't be parsed
+            import logging
+
+            logging.warning(f"Skipping invalid chord '{chord_str}': {e}")
+            continue
 
     return stream
 

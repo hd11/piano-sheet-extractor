@@ -108,20 +108,40 @@ def notes_to_stream(
 
     # 메타데이터 설정
     stream.append(music21.tempo.MetronomeMark(number=bpm))
-    stream.append(music21.key.Key(key))
+
+    # Parse key string (e.g., "A major" → Key('A', 'major'))
+    key_parts = key.split()
+    if len(key_parts) == 2:
+        tonic, mode = key_parts
+        stream.append(music21.key.Key(tonic, mode))
+    else:
+        # Fallback: try to parse as-is
+        stream.append(music21.key.Key(key))
+
     stream.append(music21.meter.TimeSignature(time_signature))
 
     # Note 변환 (초 → quarterLength)
+    # Use coarse quantization grid to avoid very short durations
+    # Quantize to 8th note (0.5 quarter note) grid
+    quantize_grid = 0.5  # 8th note
+
     for n in notes:
         m21_note = music21.note.Note(n.pitch)
-        m21_note.offset = seconds_to_quarter_length(n.onset, bpm)
-        m21_note.duration.quarterLength = seconds_to_quarter_length(n.duration, bpm)
+
+        # Quantize offset to grid
+        offset_ql = seconds_to_quarter_length(n.onset, bpm)
+        offset_ql = round(offset_ql / quantize_grid) * quantize_grid
+        m21_note.offset = offset_ql
+
+        # Quantize duration to grid, minimum 1 grid unit
+        duration_ql = seconds_to_quarter_length(n.duration, bpm)
+        duration_ql = max(
+            quantize_grid, round(duration_ql / quantize_grid) * quantize_grid
+        )
+
+        m21_note.duration.quarterLength = duration_ql
         m21_note.volume.velocity = n.velocity
         stream.append(m21_note)
-
-    # 퀀타이즈 (16분음표 그리드)
-    # quarterLengthDivisors=[4] → 4분음표를 4등분 → 16분음표
-    stream.quantize(quarterLengthDivisors=[4], inPlace=True)
 
     return stream
 
@@ -155,6 +175,12 @@ def stream_to_musicxml(stream: music21.stream.Stream) -> str:
         temp_path = f.name
 
     try:
+        # Clean up stream: remove any elements with invalid durations
+        # This is a workaround for music21 export issues
+        for element in stream.flatten().notes:
+            if element.duration.quarterLength <= 0:
+                element.duration.quarterLength = 0.5  # Default to 8th note
+
         # Stream을 MusicXML 파일로 작성
         stream.write("musicxml", fp=temp_path)
 
@@ -163,6 +189,31 @@ def stream_to_musicxml(stream: music21.stream.Stream) -> str:
             musicxml_str = f.read()
 
         return musicxml_str
+    except Exception as e:
+        # If export fails, try with a simplified stream (notes only, no chords)
+        import logging
+
+        logging.warning(
+            f"MusicXML export failed: {e}. Retrying with simplified stream..."
+        )
+
+        # Create a new stream with only notes
+        simple_stream = music21.stream.Stream()
+        simple_stream.append(music21.tempo.MetronomeMark(number=120))
+        simple_stream.append(music21.meter.TimeSignature("4/4"))
+
+        for element in stream.flatten().notes:
+            if isinstance(element, music21.note.Note):
+                simple_stream.append(element)
+
+        try:
+            simple_stream.write("musicxml", fp=temp_path)
+            with open(temp_path, "r", encoding="utf-8") as f:
+                musicxml_str = f.read()
+            return musicxml_str
+        except Exception as e2:
+            logging.error(f"Simplified export also failed: {e2}")
+            raise
     finally:
         # 임시 파일 삭제
         Path(temp_path).unlink(missing_ok=True)
