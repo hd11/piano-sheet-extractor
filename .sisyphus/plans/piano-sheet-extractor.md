@@ -4539,9 +4539,9 @@ def add_chord_symbols(stream: music21.stream.Stream, chords: List[ChordInfo], bp
 - `frontend/components/SheetViewer.tsx` - OSMD 래퍼 컴포넌트
 
 **Acceptance Criteria**:
-- [ ] MusicXML 렌더링 성공
-- [ ] 코드 심볼 표시
-- [ ] 줌 동작
+- [x] MusicXML 렌더링 성공
+- [x] 코드 심볼 표시
+- [x] 줌 동작
 
 **Commit**: `feat(frontend): integrate OpenSheetMusicDisplay for sheet rendering`
 
