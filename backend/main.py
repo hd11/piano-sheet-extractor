@@ -3,6 +3,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api import (
+    upload_router,
+    youtube_router,
+    status_router,
+    result_router,
+    download_router,
+)
+
 app = FastAPI(
     title="Piano Sheet Extractor API",
     description="Extract piano sheet music from audio files",
@@ -17,6 +25,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register API routers
+app.include_router(upload_router)
+app.include_router(youtube_router)
+app.include_router(status_router)
+app.include_router(result_router)
+app.include_router(download_router)
 
 
 @app.get("/")
