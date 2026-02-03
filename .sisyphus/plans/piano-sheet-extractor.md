@@ -4605,11 +4605,11 @@ function parseTime(timeStr: string): number {
 - `frontend/utils/timeFormat.ts` - 시간 변환 유틸리티
 
 **Acceptance Criteria**:
-- [ ] BPM 수정 → 저장 → 반영
-- [ ] Key 수정 → 저장 → 반영
-- [ ] 코드 시간 입력: `01:30.0` 입력 → 백엔드에 `90.0` 전송
-- [ ] 코드 시간 표시: 백엔드 `90.0` → UI에 `01:30.0` 표시
-- [ ] 난이도 변경 → 악보 변경
+- [x] BPM 수정 → 저장 → 반영
+- [x] Key 수정 → 저장 → 반영
+- [x] 코드 시간 입력: `01:30.0` 입력 → 백엔드에 `90.0` 전송
+- [x] 코드 시간 표시: 백엔드 `90.0` → UI에 `01:30.0` 표시
+- [x] 난이도 변경 → 악보 변경
 
 **Commit**: `feat(frontend): implement editing UI for BPM, key, chords, difficulty`
 
