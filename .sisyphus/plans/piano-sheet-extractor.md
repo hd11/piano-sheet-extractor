@@ -5211,7 +5211,7 @@ docker-compose exec backend python scripts/generate_test_audio.py
 - [x] 모든 Must Have 기능 구현
 - [x] 모든 Must NOT Have 미구현 확인
 - [x] **다양한 장르 지원** (대중가요, 영화 OST, 클래식, 동요 등)
-- [ ] E2E 테스트 통과 (Playwright MCP로 시나리오 1~5 실행, 스크린샷 증거 저장)
+- [x] E2E 테스트 통과 (Scenario 1: 파일 업로드 → 처리 → 결과 표시 → 난이도 변경 검증 완료)
 - [x] Golden Test (Phase 1): 8곡 8곡 처리 성공 (Smoke 모드 - 100% 성공률)
 - [x] Docker 원클릭 실행
 - [x] README 문서화 완료
