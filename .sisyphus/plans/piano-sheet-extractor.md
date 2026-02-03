@@ -4666,10 +4666,10 @@ function parseTime(timeStr: string): number {
 - "Docker Environment Requirements" - Dockerfile 템플릿, 시스템 의존성
 
 **Acceptance Criteria**:
-- [ ] `docker-compose up --build` 한 번에 실행
-- [ ] localhost:3000 → 프론트엔드
-- [ ] localhost:8000 → 백엔드 API
-- [ ] 전체 플로우 동작
+- [x] `docker-compose up --build` 한 번에 실행
+- [x] localhost:3000 → 프론트엔드
+- [x] localhost:8000 → 백엔드 API
+- [x] 전체 플로우 동작
 
 **Commit**: `chore(docker): complete Docker setup`
 
