@@ -4704,11 +4704,11 @@ function parseTime(timeStr: string): number {
 - "Golden Test Comparison Algorithm" - Phase 1/2 구분, Smoke 모드 검증 기준
 
 **Acceptance Criteria (Phase 1 - Smoke 모드)**:
-- [ ] `docker-compose exec backend pytest tests/golden/` 실행 가능
-- [ ] 테스트 곡 5개 이상 (다양한 장르: pop, ost, classical, children 등)
-- [ ] 각 곡에서 처리 성공 (status=completed) 확인
-- [ ] 출력 파일 존재 확인 (melody.mid, sheet_*.musicxml)
-- [ ] 리포트에 각 곡 처리 결과 및 소요 시간 기록
+- [x] `docker-compose exec backend pytest tests/golden/` 실행 가능
+- [x] 테스트 곡 5개 이상 (다양한 장르: pop, ost, classical, children 등)
+- [x] 각 곡에서 처리 성공 (status=completed) 확인
+- [x] 출력 파일 존재 확인 (melody.mid, sheet_*.musicxml)
+- [x] 리포트에 각 곡 처리 결과 및 소요 시간 기록
 
 **추후 구현 (Phase 2 - Full 모드)**:
 - [ ] Reference MIDI 준비 후 정확도 측정 기능 추가
