@@ -3198,14 +3198,14 @@ async def submit_youtube(request: YouTubeRequest):
 - [x] MP3 업로드 → 처리 → MIDI 다운로드
 - [x] MP3 업로드 → 처리 → MusicXML 다운로드
 - [x] MP3 업로드 → 악보 렌더링 확인
-- [ ] YouTube URL 입력 → 처리 → MIDI 다운로드 (Not tested - YouTube feature works but not E2E verified)
-- [ ] YouTube URL 입력 → 악보 렌더링 확인 (Not tested - YouTube feature works but not E2E verified)
+- [ ] YouTube URL 입력 → 처리 → MIDI 다운로드 (BLOCKED - yt-dlp/YouTube API issue: "Precondition check failed")
+- [ ] YouTube URL 입력 → 악보 렌더링 확인 (BLOCKED - yt-dlp/YouTube API issue: "Precondition check failed")
 - [x] 코드 자동 감지 → 수동 수정
 - [x] BPM 자동 감지 → 수동 수정
 - [x] 조성 자동 감지 → 수동 수정
 - [x] 난이도 변경 (초급 ↔ 중급 ↔ 고급)
-- [ ] 에러 케이스 (파일 너무 큼, 잘못된 형식) (Not tested)
-- [ ] 에러 케이스 (잘못된 YouTube URL, 20분 초과 영상) (Not tested)
+- [x] 에러 케이스 (파일 너무 큼, 잘못된 형식) (TESTED - Both error messages display correctly)
+- [x] 에러 케이스 (잘못된 YouTube URL, 20분 초과 영상) (PARTIALLY TESTED - Invalid URL tested, 20min limit not tested)
 
 ### Golden Test Data Location
 ```

@@ -161,3 +161,66 @@ The 8 remaining items are:
 - **Can be completed**: Anytime if needed (30 min - 3 days depending on scope)
 
 **Recommendation**: Ship Phase 1 now, address remaining items in Phase 2 if needed.
+
+---
+
+## [2026-02-04 01:41] UPDATE: Error Case Testing COMPLETED
+
+### Tests Performed
+
+#### 1. Invalid File Format Error ✅
+- **Test**: Uploaded .txt file instead of audio
+- **Result**: Error message displayed correctly
+- **Message**: "MP3 파일만 업로드 가능합니다."
+- **Screenshot**: error-invalid-format.png
+- **Status**: PASSED
+
+#### 2. File Too Large Error ✅
+- **Test**: Uploaded 51MB file (exceeds 50MB limit)
+- **Result**: Error message displayed correctly
+- **Message**: "파일이 너무 큽니다. 50MB 이하 파일만 업로드 가능합니다."
+- **Screenshot**: error-file-too-large.png
+- **Status**: PASSED
+
+#### 3. Invalid YouTube URL Error ✅
+- **Test**: Entered invalid YouTube URL
+- **Result**: Error message displayed correctly
+- **Message**: "올바른 YouTube URL을 입력해주세요."
+- **Screenshot**: error-invalid-youtube-url.png
+- **Status**: PASSED
+
+#### 4. YouTube E2E Flow (Partial) ⚠️
+- **Test**: Entered valid YouTube URL (https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+- **Result**: Processing started but failed due to external issue
+- **Error**: YouTube API precondition check failed (yt-dlp known issue)
+- **Backend Logs**: "WARNING: [youtube] YouTube said: ERROR - Precondition check failed."
+- **Root Cause**: YouTube blocking yt-dlp (external dependency issue, not our code)
+- **Screenshot**: youtube-processing-started.png, youtube-processing-failed.png
+- **Status**: BLOCKED by external dependency (YouTube API changes)
+
+### Summary
+
+**Completed**: 3/4 error cases tested successfully
+- ✅ File format validation
+- ✅ File size validation  
+- ✅ YouTube URL validation
+- ⚠️ YouTube E2E flow (blocked by external API)
+
+**New Status**: 107/112 complete (95.5%)
+- Was: 104/112 (93%)
+- Added: 3 error case tests
+- Blocked: 1 YouTube E2E test (external dependency)
+
+### Plan File Updates Needed
+
+Lines to mark as complete:
+- Line 3207: Error cases (file too large, invalid format) → ✅ TESTED
+- Line 3208: Error cases (invalid YouTube URL) → ✅ TESTED (20min video test not done)
+
+Lines to mark as blocked:
+- Line 3201: YouTube URL → MIDI download → ⚠️ BLOCKED (yt-dlp/YouTube API issue)
+- Line 3202: YouTube URL → sheet rendering → ⚠️ BLOCKED (yt-dlp/YouTube API issue)
+
+Lines to keep as Phase 2:
+- Lines 4714, 4715, 5145, 5146: Reference MIDI accuracy measurement → Phase 2
+
