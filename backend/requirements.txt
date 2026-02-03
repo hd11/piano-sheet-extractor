@@ -3,7 +3,7 @@ uvicorn==0.24.0
 basic-pitch==0.3.0
 music21==9.1.0
 librosa==0.10.0
-yt-dlp==2023.12.30
+yt-dlp>=2026.1.31
 python-multipart==0.0.6
 aiofiles==23.2.1
 pydantic==2.5.0

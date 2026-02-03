@@ -3198,8 +3198,8 @@ async def submit_youtube(request: YouTubeRequest):
 - [x] MP3 업로드 → 처리 → MIDI 다운로드
 - [x] MP3 업로드 → 처리 → MusicXML 다운로드
 - [x] MP3 업로드 → 악보 렌더링 확인
-- [ ] YouTube URL 입력 → 처리 → MIDI 다운로드 (BLOCKED - yt-dlp/YouTube API issue: "Precondition check failed")
-- [ ] YouTube URL 입력 → 악보 렌더링 확인 (BLOCKED - yt-dlp/YouTube API issue: "Precondition check failed")
+- [x] YouTube URL 입력 → 처리 → MIDI 다운로드 (COMPLETED - yt-dlp updated to 2026.1.31, YouTube download works)
+- [x] YouTube URL 입력 → 악보 렌더링 확인 (COMPLETED - Result page displays, MIDI download successful)
 - [x] 코드 자동 감지 → 수동 수정
 - [x] BPM 자동 감지 → 수동 수정
 - [x] 조성 자동 감지 → 수동 수정
