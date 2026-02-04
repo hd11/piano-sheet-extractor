@@ -123,17 +123,17 @@ def notes_to_stream(
     # Note 변환 (초 → quarterLength)
     # Use coarse quantization grid to avoid very short durations
     # Quantize to 8th note (0.5 quarter note) grid
-    quantize_grid = 0.5  # 8th note
+    # Use finer grid to reduce MusicXML "inexpressible duration" errors
+    # (music21 can express standard durations better with 16th-note resolution)
+    quantize_grid = 0.25  # 16th note
 
     for n in notes:
         m21_note = music21.note.Note(n.pitch)
 
-        # Quantize offset to grid
+        # Quantize offset/duration to grid
         offset_ql = seconds_to_quarter_length(n.onset, bpm)
-        offset_ql = round(offset_ql / quantize_grid) * quantize_grid
-        m21_note.offset = offset_ql
+        offset_ql = max(0.0, round(offset_ql / quantize_grid) * quantize_grid)
 
-        # Quantize duration to grid, minimum 1 grid unit
         duration_ql = seconds_to_quarter_length(n.duration, bpm)
         duration_ql = max(
             quantize_grid, round(duration_ql / quantize_grid) * quantize_grid
@@ -141,7 +141,10 @@ def notes_to_stream(
 
         m21_note.duration.quarterLength = duration_ql
         m21_note.volume.velocity = n.velocity
-        stream.append(m21_note)
+
+        # IMPORTANT: use insert() to preserve the quantized offset.
+        # Stream.append() will place the element at the end and overwrite offsets.
+        stream.insert(offset_ql, m21_note)
 
     return stream
 
@@ -190,30 +193,42 @@ def stream_to_musicxml(stream: music21.stream.Stream) -> str:
 
         return musicxml_str
     except Exception as e:
-        # If export fails, try with a simplified stream (notes only, no chords)
+        # If export fails, try rebuilding a clean, notated stream.
+        # Common failure cause: non-expressible durations / missing measure structure.
         import logging
 
         logging.warning(
-            f"MusicXML export failed: {e}. Retrying with simplified stream..."
+            f"MusicXML export failed: {e}. Retrying with rebuilt/notated stream..."
         )
 
-        # Create a new stream with only notes
-        simple_stream = music21.stream.Stream()
-        simple_stream.append(music21.tempo.MetronomeMark(number=120))
-        simple_stream.append(music21.meter.TimeSignature("4/4"))
-
-        for element in stream.flatten().notes:
-            if isinstance(element, music21.note.Note):
-                simple_stream.append(element)
-
         try:
-            simple_stream.write("musicxml", fp=temp_path)
+            # Rebuild stream by inserting only notes/chords at their offsets.
+            rebuilt = music21.stream.Stream()
+
+            # Preserve metadata from original stream when possible
+            for cls in (
+                music21.tempo.MetronomeMark,
+                music21.key.Key,
+                music21.meter.TimeSignature,
+            ):
+                for el in stream.getElementsByClass(cls):
+                    rebuilt.insert(float(el.offset), el)
+
+            for element in stream.flatten().notes:
+                rebuilt.insert(float(element.offset), element)
+
+            # Make notation/measures to satisfy MusicXML writer
+            rebuilt = rebuilt.makeMeasures(inPlace=False)
+            rebuilt = rebuilt.makeNotation(inPlace=False)
+
+            rebuilt.write("musicxml", fp=temp_path)
             with open(temp_path, "r", encoding="utf-8") as f:
                 musicxml_str = f.read()
             return musicxml_str
         except Exception as e2:
-            logging.error(f"Simplified export also failed: {e2}")
+            logging.error(f"Rebuilt export also failed: {e2}")
             raise
+
     finally:
         # 임시 파일 삭제
         Path(temp_path).unlink(missing_ok=True)

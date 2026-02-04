@@ -138,33 +138,51 @@ def add_chord_symbols(
         music21.stream.Stream: 코드 심볼이 추가된 Stream 객체
 
     Note:
-        - time(초) → quarterLength 변환 후 Stream에 insert
-        - music21.harmony.ChordSymbol 사용
+        - Chord 분석은 프레임 단위로 매우 촘촘하게 나오는 경우가 있어,
+          그대로 insert하면 MusicXML export에서 매우 짧은 forward/rest가 생성되어
+          "inexpressible duration" / "2048th" 오류를 유발할 수 있습니다.
+        - 따라서 beat(1/4 note) 그리드로 퀀타이즈하고, 같은 시점의 코드들은
+          confidence가 가장 높은 1개만 남깁니다.
         - 원본 Stream을 직접 수정하여 반환 (in-place)
     """
-    for chord_info in chords:
-        offset_ql = seconds_to_quarter_length(chord_info["time"], bpm)
-        chord_str = chord_info["chord"]
 
-        # Skip invalid chord symbols
-        if not chord_str or len(chord_str) == 0:
+    if not chords:
+        return stream
+
+    beat_sec = 60.0 / bpm
+
+    # Quantize to beat grid and keep best-confidence chord per slot
+    best_by_time: Dict[float, Dict] = {}
+    for chord_info in chords:
+        chord_str = chord_info.get("chord")
+        if not chord_str:
             continue
 
         # Validate chord starts with a valid root note (A-G)
         if chord_str[0].upper() not in "ABCDEFG":
             continue
 
+        t = float(chord_info.get("time", 0.0))
+        # Snap to nearest beat to avoid tiny durations
+        t_q = round(t / beat_sec) * beat_sec
+
+        prev = best_by_time.get(t_q)
+        if prev is None or float(chord_info.get("confidence", 0.0)) > float(
+            prev.get("confidence", 0.0)
+        ):
+            best_by_time[t_q] = chord_info
+
+    for t_q, chord_info in sorted(best_by_time.items(), key=lambda x: x[0]):
+        chord_str = chord_info.get("chord")
+        offset_ql = seconds_to_quarter_length(t_q, bpm)
+
         try:
-            # Create music21 ChordSymbol
             cs = music21.harmony.ChordSymbol(chord_str)
-            cs.offset = offset_ql
             stream.insert(offset_ql, cs)
         except Exception as e:
-            # Skip chords that can't be parsed
             import logging
 
             logging.warning(f"Skipping invalid chord '{chord_str}': {e}")
-            continue
 
     return stream
 
