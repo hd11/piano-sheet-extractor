@@ -1,8 +1,8 @@
 """
-Audio to MIDI conversion using ByteDance Piano Transcription.
+Audio to MIDI conversion using Basic Pitch.
 
 This module provides functionality to convert audio files (MP3/WAV) to MIDI format
-using ByteDance's Piano Transcription model.
+using Spotify's Basic Pitch model.
 """
 
 import logging
@@ -26,35 +26,15 @@ if not hasattr(scipy.signal, "blackman"):
 if not hasattr(scipy.signal, "bartlett"):
     scipy.signal.bartlett = windows.bartlett
 
-import torch
-import librosa
-import numpy as np
-import pretty_midi
-from piano_transcription_inference import PianoTranscription, sample_rate
+from basic_pitch.inference import predict
+from basic_pitch import ICASSP_2022_MODEL_PATH
 
 logger = logging.getLogger(__name__)
-
-# Singleton pattern for model - avoid reloading on every call
-_transcriptor = None
-_device = None
-
-
-def _get_transcriptor():
-    """Get or create PianoTranscription model (singleton)."""
-    global _transcriptor, _device
-
-    if _transcriptor is None:
-        _device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Initializing PianoTranscription model on {_device}")
-        _transcriptor = PianoTranscription(device=_device, checkpoint_path=None)
-        logger.info("PianoTranscription model loaded successfully")
-
-    return _transcriptor
 
 
 def convert_audio_to_midi(audio_path: Path, output_path: Path) -> Dict[str, Any]:
     """
-    Convert audio file to MIDI using ByteDance Piano Transcription.
+    Convert audio file to MIDI using Basic Pitch.
 
     Args:
         audio_path: Path to input audio file (MP3/WAV)
@@ -93,32 +73,34 @@ def convert_audio_to_midi(audio_path: Path, output_path: Path) -> Dict[str, Any]
     start_time = time.time()
 
     try:
-        # Load audio using librosa directly (avoid piano_transcription's broken load_audio)
-        audio, sr = librosa.load(str(audio_path), sr=sample_rate, mono=True)
-        audio = audio.astype(np.float32)
-
-        # Calculate duration from audio length
-        duration_seconds = len(audio) / sample_rate
-
-        # Get transcriptor (singleton)
-        transcriptor = _get_transcriptor()
-
-        # Run transcription
-        logger.info(f"Running transcription on {_device}...")
-        transcriptor.transcribe(audio, str(output_path))
-
-        processing_time = time.time() - start_time
-        logger.info(f"Transcription completed in {processing_time:.2f}s")
-
-        # Count notes from MIDI file
-        pm = pretty_midi.PrettyMIDI(str(output_path))
-        note_count = sum(
-            len(instrument.notes)
-            for instrument in pm.instruments
-            if not instrument.is_drum
+        # Run Basic Pitch inference
+        model_output, midi_data, note_events = predict(
+            str(audio_path),
+            model_or_model_path=ICASSP_2022_MODEL_PATH,
         )
 
+        processing_time = time.time() - start_time
+        logger.info(f"Basic Pitch inference completed in {processing_time:.2f}s")
+
+        # Write MIDI file
+        midi_data.write(str(output_path))
         logger.info(f"MIDI file written to: {output_path}")
+
+        # Calculate metadata
+        note_count = len(note_events) if note_events is not None else 0
+
+        # Handle both old and new basic-pitch API
+        # Newer versions return a dict, older versions return an array
+        if isinstance(model_output, dict):
+            # New API: model_output is a dict with keys like 'contour', 'onset', 'frame'
+            # Use MIDI data duration as fallback
+            duration_seconds = midi_data.get_end_time()
+        else:
+            # Old API: model_output is an array
+            duration_seconds = (
+                model_output.shape[0] / 50.0
+            )  # Basic Pitch outputs at 50Hz
+
         logger.info(
             f"Conversion complete: {note_count} notes, "
             f"duration {duration_seconds:.2f}s, "
