@@ -90,3 +90,38 @@ Reference MXL files may be at **different difficulty levels** than generated med
 - **85% threshold is unrealistic** with current pipeline
 - **Estimated 2.5-3.5 days** of debugging required to reach production-ready state
 
+
+## [2026-02-04] Alignment diagnosis (song_01) — similarity near-zero is NOT a seconds→quarterLength bug
+
+Ran `backend/scripts/diagnose_alignment.py` (output saved under `backend/scripts/_diagnose_out/song_01/diagnose_alignment.txt`).
+
+### Key evidence
+- **Tempo/timebase looks consistent**:
+  - `bpm_ref(from MXL)=122.0`
+  - `bpm_gen(from XML)=123.046875`
+  - `bpm_analysis(used for conversion)=123.05`
+  - Both scores start at `first_onset_ql=0.000` (no obvious constant offset bug).
+- **Generated file contains chord symbols that get counted as notes**:
+  - The first generated “notes” are `p=45,48,52` at `t=0.000` with `dur_ql=0.000`, which matches the default voicing of an **A-minor chord (A2-C3-E3)**.
+  - This strongly suggests `music21.harmony.ChordSymbol` entries (inserted via `add_chord_symbols()`) are being returned by `score.flatten().notes` and then treated as `Chord` in `_extract_notes()`.
+  - These chord-symbol-derived pitches have **duration 0**, so they will never match reference notes under duration tolerance, but they **inflate gen note count and pollute ordering/pitch statistics**.
+- **Pitch/range mismatch indicates we’re not comparing like-for-like**:
+  - `ref_pitch_range=35..93` vs `gen_pitch_range=45..79` (generated is constrained/simplified; reference includes much lower + higher notes).
+- **Score span mismatch**:
+  - `ref_span_ql=564` vs `gen_span_ql=399` (generated roughly matches ~192s at ~123 BPM; reference’s timeline appears substantially longer in quarterLength terms).
+
+### Working conclusion
+The extremely low similarity (0.05–0.33%) is better explained by **representation mismatch** (generated includes chord symbols; reference likely doesn’t or encodes harmony differently) and **content mismatch** (reference appears to be a fuller arrangement across a wider range) than by a BPM/seconds→quarterLength conversion bug.
+
+
+## [2026-02-04] Comparator fix applied: skip music21.harmony.ChordSymbol in _extract_notes
+
+- Patched `backend/core/musicxml_comparator.py` to `continue` when element is `music21.harmony.ChordSymbol` (ChordSymbol is a subclass of `music21.chord.Chord`).
+- Verification on `song_01` generated `sheet_medium.musicxml`:
+  - Raw `gen_score.flatten().notes` count: **449**; first types include many `ChordSymbol`.
+  - Comparator-extracted gen notes: **115** (down from 1117 when chord symbols were miscounted).
+  - Zero-duration notes after filtering: **0**.
+  - `compare_musicxml(song_01)` now reports: matched=2, ref=2040, gen=115, similarity≈**0.098%**.
+
+Note: the standalone diagnostic script still shows chord-symbol entries because it directly prints `flatten().notes` from the generated MusicXML; comparator extraction is now clean.
+

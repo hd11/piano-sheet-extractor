@@ -1,0 +1,68 @@
+time="2026-02-04T09:41:14+09:00" level=warning msg="C:\\Users\\handuk.lee\\projects\\mk-pinano-sheet\\docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /app
+configfile: pytest.ini
+plugins: anyio-3.7.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+tests/golden/test_golden.py::TestGoldenCompare::test_compare_with_reference[song_02] FAILED [100%]
+
+=================================== FAILURES ===================================
+E   AssertionError: Similarity 0.12% below threshold 85%
+    assert 0.0011627906976744186 >= 0.85
+----------------------------- Captured stdout call -----------------------------
+
+============================================================
+Comparing: song_02
+============================================================
+Step 1: Converting audio to MIDI...
+Predicting MIDI for /app/tests/golden/data/song_02/input.mp3...
+  OK MIDI created: 356 notes
+Step 2: Extracting melody...
+  OK Melody extracted: 320 notes
+Step 3: Analyzing audio...
+  OK Analysis complete: BPM=136.0, Key=G# minor
+Step 4: Generating difficulty sheets...
+  OK All difficulty sheets generated
+Step 5: Comparing with reference MusicXML...
+
+Comparison Result for song_02:
+  Similarity: 0.12%
+  Passed: False
+  Ref notes: 1720
+  Gen notes: 34
+  Matched: 2
+
+FAILED: song_02
+   Error: Similarity 0.12% below threshold 85%
+assert 0.0011627906976744186 >= 0.85
+   Time before failure: 91.10s
+------------------------------ Captured log call -------------------------------
+WARNING  root:midi_to_musicxml.py:196 MusicXML export failed: In part (None), measure (1): Cannot convert inexpressible durations to MusicXML.. Retrying with simplified stream...
+WARNING  root:midi_to_musicxml.py:196 MusicXML export failed: In part (None), measure (1): Cannot convert inexpressible durations to MusicXML.. Retrying with simplified stream...
+WARNING  root:midi_to_musicxml.py:196 MusicXML export failed: In part (None), measure (1): Cannot convert inexpressible durations to MusicXML.. Retrying with simplified stream...
+/app/tests/golden/test_golden.py:278: AssertionError: Similarity 0.12% below threshold 85%
+=============================== warnings summary ===============================
+../usr/local/lib/python3.11/site-packages/resampy/filters.py:50
+  /usr/local/lib/python3.11/site-packages/resampy/filters.py:50: DeprecationWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html
+    import pkg_resources
+
+tests/golden/test_golden.py::TestGoldenCompare::test_compare_with_reference[song_02]
+  /usr/local/lib/python3.11/site-packages/audioread/rawread.py:16: DeprecationWarning: 'aifc' is deprecated and slated for removal in Python 3.13
+    import aifc
+
+tests/golden/test_golden.py::TestGoldenCompare::test_compare_with_reference[song_02]
+  /usr/local/lib/python3.11/site-packages/audioread/rawread.py:17: DeprecationWarning: 'audioop' is deprecated and slated for removal in Python 3.13
+    import audioop
+
+tests/golden/test_golden.py::TestGoldenCompare::test_compare_with_reference[song_02]
+  /usr/local/lib/python3.11/site-packages/audioread/rawread.py:19: DeprecationWarning: 'sunau' is deprecated and slated for removal in Python 3.13
+    import sunau
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/golden/test_golden.py::TestGoldenCompare::test_compare_with_reference[song_02]
+=================== 1 failed, 4 warnings in 96.21s (0:01:36) ===================

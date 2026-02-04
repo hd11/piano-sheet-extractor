@@ -1,0 +1,925 @@
+time="2026-02-04T14:49:32+09:00" level=warning msg="C:\\Users\\handuk.lee\\projects\\mk-pinano-sheet\\docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /app
+configfile: pytest.ini
+plugins: anyio-3.7.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... 2026-02-04 05:49:34.362872: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-02-04 05:49:34.365296: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-02-04 05:49:34.412442: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-02-04 05:49:34.412790: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-02-04 05:49:34.414581: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-02-04 05:49:34.424102: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-02-04 05:49:34.424454: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-02-04 05:49:35.308691: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+collected 26 items / 18 deselected / 8 selected
+
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_01] 
+============================================================
+Melody Comparison: song_01
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 588 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_01/input.mp3...
+  ✓ MIDI created: 1164 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 926 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_01:
+  Reference notes: 588
+  Generated notes: 926
+  Similarity: 0.00%
+
+❌ FAILED: song_01
+   Error: Melody similarity 0.00% below threshold 85.00%
+assert 0.0 >= 0.85
+   Time before failure: 21.33s
+FAILED
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_02] 
+============================================================
+Melody Comparison: song_02
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 734 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_02/input.mp3...
+  ✓ MIDI created: 356 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 320 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_02:
+  Reference notes: 734
+  Generated notes: 320
+  Similarity: 0.14%
+
+❌ FAILED: song_02
+   Error: Melody similarity 0.14% below threshold 85.00%
+assert 0.0013623978201634877 >= 0.85
+   Time before failure: 7.79s
+FAILED
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_03] 
+============================================================
+Melody Comparison: song_03
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 477 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_03/input.mp3...
+  ✓ MIDI created: 1229 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 1007 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_03:
+  Reference notes: 477
+  Generated notes: 1007
+  Similarity: 0.60%
+
+❌ FAILED: song_03
+   Error: Melody similarity 0.60% below threshold 85.00%
+assert 0.005958291956305859 >= 0.85
+   Time before failure: 8.28s
+FAILED
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_04] 
+============================================================
+Melody Comparison: song_04
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 649 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_04/input.mp3...
+  ✓ MIDI created: 1539 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 1195 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_04:
+  Reference notes: 649
+  Generated notes: 1195
+  Similarity: 0.00%
+
+❌ FAILED: song_04
+   Error: Melody similarity 0.00% below threshold 85.00%
+assert 0.0 >= 0.85
+   Time before failure: 10.23s
+FAILED
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_05] 
+============================================================
+Melody Comparison: song_05
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 607 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_05/input.mp3...
+  ✓ MIDI created: 2062 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 1626 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_05:
+  Reference notes: 607
+  Generated notes: 1626
+  Similarity: 0.18%
+
+❌ FAILED: song_05
+   Error: Melody similarity 0.18% below threshold 85.00%
+assert 0.0018450184501845018 >= 0.85
+   Time before failure: 13.57s
+FAILED
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_06] 
+============================================================
+Melody Comparison: song_06
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 653 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_06/input.mp3...
+  ✓ MIDI created: 2486 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 1755 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_06:
+  Reference notes: 653
+  Generated notes: 1755
+  Similarity: 0.23%
+
+❌ FAILED: song_06
+   Error: Melody similarity 0.23% below threshold 85.00%
+assert 0.002279202279202279 >= 0.85
+   Time before failure: 12.11s
+FAILED
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_07] 
+============================================================
+Melody Comparison: song_07
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 455 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_07/input.mp3...
+  ✓ MIDI created: 1869 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 1379 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_07:
+  Reference notes: 455
+  Generated notes: 1379
+  Similarity: 0.51%
+
+❌ FAILED: song_07
+   Error: Melody similarity 0.51% below threshold 85.00%
+assert 0.005076142131979695 >= 0.85
+   Time before failure: 12.42s
+FAILED
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_08] 
+============================================================
+Melody Comparison: song_08
+============================================================
+Step 1: Extracting reference melody...
+  ✓ Reference melody: 625 notes
+Step 2: Running pipeline to generate melody...
+Predicting MIDI for /app/tests/golden/data/song_08/input.mp3...
+  ✓ MIDI created: 1700 notes
+Step 3: Extracting generated melody...
+  ✓ Generated melody: 1338 notes
+Step 4: Comparing melodies...
+
+Melody Comparison Result for song_08:
+  Reference notes: 625
+  Generated notes: 1338
+  Similarity: 1.42%
+
+❌ FAILED: song_08
+   Error: Melody similarity 1.42% below threshold 85.00%
+assert 0.014200298953662182 >= 0.85
+   Time before failure: 10.07s
+FAILED
+
+=================================== FAILURES ===================================
+_____________ TestMelodyComparison.test_melody_similarity[song_01] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8af110>
+song_id = 'song_01', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_010/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 0.00% below threshold 85.00%
+E           assert 0.0 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+_____________ TestMelodyComparison.test_melody_similarity[song_02] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8af3d0>
+song_id = 'song_02', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_020/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 0.14% below threshold 85.00%
+E           assert 0.0013623978201634877 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+_____________ TestMelodyComparison.test_melody_similarity[song_03] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8af650>
+song_id = 'song_03', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_030/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 0.60% below threshold 85.00%
+E           assert 0.005958291956305859 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+_____________ TestMelodyComparison.test_melody_similarity[song_04] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8af8d0>
+song_id = 'song_04', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_040/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 0.00% below threshold 85.00%
+E           assert 0.0 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+_____________ TestMelodyComparison.test_melody_similarity[song_05] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8afbd0>
+song_id = 'song_05', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_050/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 0.18% below threshold 85.00%
+E           assert 0.0018450184501845018 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+_____________ TestMelodyComparison.test_melody_similarity[song_06] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8afed0>
+song_id = 'song_06', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_060/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 0.23% below threshold 85.00%
+E           assert 0.002279202279202279 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+_____________ TestMelodyComparison.test_melody_similarity[song_07] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8b4210>
+song_id = 'song_07', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_070/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 0.51% below threshold 85.00%
+E           assert 0.005076142131979695 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+_____________ TestMelodyComparison.test_melody_similarity[song_08] _____________
+
+self = <golden.test_golden.TestMelodyComparison object at 0x71aabf8b4510>
+song_id = 'song_08', golden_data_dir = PosixPath('/app/tests/golden/data')
+job_storage_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_melody_similarity_song_080/test_jobs')
+
+    @pytest.mark.parametrize(
+        "song_id",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_melody_similarity(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare melody extracted from reference MusicXML vs generated melody.
+    
+        Validates:
+        1. Reference melody extraction from reference.mxl
+        2. Generated melody extraction from pipeline output
+        3. Melody similarity >= 85% threshold
+        """
+        from core.musicxml_melody_extractor import extract_melody_from_musicxml
+        from core.musicxml_comparator import compare_note_lists
+    
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+    
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+    
+        print(f"\n{'=' * 60}")
+        print(f"Melody Comparison: {song_id}")
+        print(f"{'=' * 60}")
+    
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+    
+        try:
+            # Step 1: Extract reference melody from reference.mxl
+            print("Step 1: Extracting reference melody...")
+            ref_melody = extract_melody_from_musicxml(str(reference_mxl))
+            assert len(ref_melody) > 0, "No reference melody notes extracted"
+            print(f"  ✓ Reference melody: {len(ref_melody)} notes")
+    
+            # Step 2: Generate pipeline output and extract melody
+            print("Step 2: Running pipeline to generate melody...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  ✓ MIDI created: {result['note_count']} notes")
+    
+            # Extract melody from generated MIDI
+            print("Step 3: Extracting generated melody...")
+            gen_melody = extract_melody(raw_midi_path)
+            assert len(gen_melody) > 0, "No generated melody notes extracted"
+            print(f"  ✓ Generated melody: {len(gen_melody)} notes")
+    
+            # Step 4: Compare melodies
+            print("Step 4: Comparing melodies...")
+            similarity = compare_note_lists(ref_melody, gen_melody)
+    
+            print(f"\nMelody Comparison Result for {song_id}:")
+            print(f"  Reference notes: {len(ref_melody)}")
+            print(f"  Generated notes: {len(gen_melody)}")
+            print(f"  Similarity: {similarity:.2%}")
+    
+            # Step 5: Assert 85% threshold
+            MELODY_SIMILARITY_THRESHOLD = 0.85
+>           assert similarity >= MELODY_SIMILARITY_THRESHOLD, (
+                f"Melody similarity {similarity:.2%} below threshold {MELODY_SIMILARITY_THRESHOLD:.2%}"
+            )
+E           AssertionError: Melody similarity 1.42% below threshold 85.00%
+E           assert 0.014200298953662182 >= 0.85
+
+tests/golden/test_golden.py:381: AssertionError
+=============================== warnings summary ===============================
+../usr/local/lib/python3.11/site-packages/resampy/filters.py:50
+  /usr/local/lib/python3.11/site-packages/resampy/filters.py:50: DeprecationWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html
+    import pkg_resources
+
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_01]
+  /usr/local/lib/python3.11/site-packages/audioread/rawread.py:16: DeprecationWarning: 'aifc' is deprecated and slated for removal in Python 3.13
+    import aifc
+
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_01]
+  /usr/local/lib/python3.11/site-packages/audioread/rawread.py:17: DeprecationWarning: 'audioop' is deprecated and slated for removal in Python 3.13
+    import audioop
+
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_01]
+  /usr/local/lib/python3.11/site-packages/audioread/rawread.py:19: DeprecationWarning: 'sunau' is deprecated and slated for removal in Python 3.13
+    import sunau
+
+tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_03]
+  /usr/local/lib/python3.11/site-packages/music21/musicxml/xmlToM21.py:5312: MusicXMLWarning: Could not import octave-shift: Error in getting Ottava
+    warnings.warn(f'Could not import {tag}: {excep}', MusicXMLWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_01]
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_02]
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_03]
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_04]
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_05]
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_06]
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_07]
+FAILED tests/golden/test_golden.py::TestMelodyComparison::test_melody_similarity[song_08]
+=========== 8 failed, 18 deselected, 5 warnings in 99.14s (0:01:39) ============
