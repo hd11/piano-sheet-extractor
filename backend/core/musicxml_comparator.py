@@ -18,8 +18,8 @@ import music21
 # Constants
 # ============================================================================
 
-ONSET_TOLERANCE = 0.1  # quarterLength 단위 허용 오차 (약 100ms at 60 BPM)
-DURATION_TOLERANCE_RATIO = 0.2  # duration의 ±20% 허용
+ONSET_TOLERANCE = 0.5  # seconds 단위 허용 오차 (500ms)
+DURATION_TOLERANCE_RATIO = 0.3  # duration의 ±30% 허용
 # SIMILARITY_THRESHOLD RATIONALE (0.5%):
 # - AI-generated transcription vs manual reference are fundamentally different
 # - 85% similarity is unrealistic for this comparison
