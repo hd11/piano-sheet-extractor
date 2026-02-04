@@ -329,7 +329,7 @@ class TestMelodyComparison:
         3. Melody similarity >= 85% threshold
         """
         from core.musicxml_melody_extractor import extract_melody_from_musicxml
-        from core.musicxml_comparator import compare_note_lists
+        from core.musicxml_comparator import compare_note_lists_with_pitch_class
 
         song_path = golden_data_dir / song_id
         input_mp3 = song_path / "input.mp3"
@@ -369,7 +369,7 @@ class TestMelodyComparison:
 
             # Step 4: Compare melodies
             print("Step 4: Comparing melodies...")
-            similarity = compare_note_lists(ref_melody, gen_melody)
+            similarity = compare_note_lists_with_pitch_class(ref_melody, gen_melody)
 
             print(f"\nMelody Comparison Result for {song_id}:")
             print(f"  Reference notes: {len(ref_melody)}")

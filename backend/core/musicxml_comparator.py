@@ -192,6 +192,24 @@ def _extract_metadata(score: music21.stream.Score) -> ScoreMetadata:
     )
 
 
+def _pitch_to_pitch_class(pitch: int) -> int:
+    """
+    Convert MIDI pitch to pitch class (0-11).
+
+    Examples:
+        C4 (60) -> 0
+        C#4 (61) -> 1
+        C5 (72) -> 0 (same pitch class as C4)
+
+    Args:
+        pitch: MIDI note number (0-127)
+
+    Returns:
+        Pitch class (0-11)
+    """
+    return pitch % 12
+
+
 def _match_notes(
     ref_notes: List[NoteInfo],
     gen_notes: List[NoteInfo],
@@ -234,6 +252,80 @@ def _match_notes(
 
             # 1. Pitch 일치 확인
             if ref_note.pitch != gen_note.pitch:
+                continue
+
+            # 2. Onset 허용 오차 확인
+            onset_diff = abs(ref_note.onset - gen_note.onset)
+            if onset_diff > onset_tolerance:
+                continue
+
+            # 3. Duration 허용 비율 확인
+            duration_diff = abs(ref_note.duration - gen_note.duration)
+            max_duration = max(ref_note.duration, gen_note.duration)
+            if max_duration > 0:
+                duration_ratio = duration_diff / max_duration
+                if duration_ratio > duration_tolerance_ratio:
+                    continue
+
+            # 모든 조건 만족 - 가장 onset이 가까운 것 선택
+            if onset_diff < best_onset_diff:
+                best_onset_diff = onset_diff
+                best_match_idx = i
+
+        if best_match_idx is not None:
+            matched_count += 1
+            used_gen_indices.add(best_match_idx)
+
+    return matched_count
+
+
+def _match_notes_pitch_class(
+    ref_notes: List[NoteInfo],
+    gen_notes: List[NoteInfo],
+    onset_tolerance: float = ONSET_TOLERANCE,
+    duration_tolerance_ratio: float = DURATION_TOLERANCE_RATIO,
+) -> int:
+    """
+    Match notes using pitch class (ignoring octave).
+
+    Same as _match_notes but compares pitch % 12 instead of exact pitch.
+
+    Matching criteria:
+    1. Pitch class matches (ignoring octave)
+    2. Onset within ±onset_tolerance
+    3. Duration within ±duration_tolerance_ratio
+
+    Greedy matching: for each ref note, find closest gen note by onset.
+    Already matched gen notes are not reused.
+
+    Args:
+        ref_notes: Reference note list
+        gen_notes: Generated note list
+        onset_tolerance: onset tolerance (quarterLength)
+        duration_tolerance_ratio: duration tolerance ratio (0.0 ~ 1.0)
+
+    Returns:
+        Number of matched notes
+    """
+    if not ref_notes or not gen_notes:
+        return 0
+
+    matched_count = 0
+    used_gen_indices = set()
+
+    for ref_note in ref_notes:
+        best_match_idx = None
+        best_onset_diff = float("inf")
+
+        ref_pitch_class = _pitch_to_pitch_class(ref_note.pitch)
+
+        for i, gen_note in enumerate(gen_notes):
+            if i in used_gen_indices:
+                continue
+
+            # 1. Pitch CLASS 일치 확인 (옥타브 무시)
+            gen_pitch_class = _pitch_to_pitch_class(gen_note.pitch)
+            if ref_pitch_class != gen_pitch_class:
                 continue
 
             # 2. Onset 허용 오차 확인
@@ -337,6 +429,64 @@ def compare_note_lists(
     max_notes = max(len(ref_notes), len(gen_notes))
     if max_notes == 0:
         return 1.0  # Both empty = identical
+    else:
+        return matched_notes / max_notes
+
+
+def compare_note_lists_with_pitch_class(
+    ref_notes: List,
+    gen_notes: List,
+    onset_tolerance: float = ONSET_TOLERANCE,
+    duration_tolerance_ratio: float = DURATION_TOLERANCE_RATIO,
+) -> float:
+    """
+    Compare two lists of Note objects using pitch class (ignoring octave).
+
+    This is more lenient than compare_note_lists as it ignores octave differences.
+    Useful when the transcription model gets the notes right but in wrong octaves.
+
+    Args:
+        ref_notes: Reference Note list
+        gen_notes: Generated Note list
+        onset_tolerance: onset tolerance in seconds
+        duration_tolerance_ratio: duration tolerance ratio (0.0 ~ 1.0)
+
+    Returns:
+        Similarity ratio (0.0 to 1.0): matched_notes / max(len(ref_notes), len(gen_notes))
+    """
+    # Convert Note objects to NoteInfo
+    ref_note_infos = []
+    for note in ref_notes:
+        ref_note_infos.append(
+            NoteInfo(
+                pitch=note.pitch,
+                onset=note.onset,
+                duration=note.duration,
+            )
+        )
+
+    gen_note_infos = []
+    for note in gen_notes:
+        gen_note_infos.append(
+            NoteInfo(
+                pitch=note.pitch,
+                onset=note.onset,
+                duration=note.duration,
+            )
+        )
+
+    # Match notes using pitch class
+    matched_notes = _match_notes_pitch_class(
+        ref_note_infos,
+        gen_note_infos,
+        onset_tolerance=onset_tolerance,
+        duration_tolerance_ratio=duration_tolerance_ratio,
+    )
+
+    # Calculate similarity
+    max_notes = max(len(ref_notes), len(gen_notes))
+    if max_notes == 0:
+        return 1.0
     else:
         return matched_notes / max_notes
 
