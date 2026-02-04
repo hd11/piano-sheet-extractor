@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Golden Test - Smoke Mode
 
@@ -161,3 +162,131 @@ class TestGoldenSmoke:
         print(f"{'=' * 60}")
         print(f"Total test files: {report['total_files']}")
         print(f"Report saved: {report_path}")
+
+
+@pytest.mark.golden
+@pytest.mark.compare
+class TestGoldenCompare:
+    """Golden Test - Compare Mode"""
+
+    @pytest.mark.parametrize(
+        "song_dir",
+        [
+            "song_01",
+            "song_02",
+            "song_03",
+            "song_04",
+            "song_05",
+            "song_06",
+            "song_07",
+            "song_08",
+        ],
+        ids=lambda s: s,
+    )
+    def test_compare_with_reference(self, song_dir, golden_data_dir, job_storage_path):
+        """Compare with reference MusicXML"""
+        from core.musicxml_comparator import compare_musicxml
+
+        song_path = golden_data_dir / song_dir
+        input_mp3 = song_path / "input.mp3"
+        reference_mxl = song_path / "reference.mxl"
+
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mxl.exists(), f"Reference MXL not found: {reference_mxl}"
+
+        print(f"\n{'=' * 60}")
+        print(f"Comparing: {song_dir}")
+        print(f"{'=' * 60}")
+
+        start_time = time.time()
+        job_dir = job_storage_path / song_dir
+        job_dir.mkdir(exist_ok=True)
+
+        try:
+            # Step 1: Audio → MIDI (Basic Pitch)
+            print("Step 1: Converting audio to MIDI...")
+            raw_midi_path = job_dir / "raw.mid"
+            result = convert_audio_to_midi(input_mp3, raw_midi_path)
+            assert raw_midi_path.exists(), "raw.mid not created"
+            assert result["note_count"] > 0, "No notes detected in MIDI"
+            print(f"  OK MIDI created: {result['note_count']} notes")
+
+            # Step 2: Melody extraction
+            print("Step 2: Extracting melody...")
+            melody_notes = extract_melody(Path(raw_midi_path))
+            assert len(melody_notes) > 0, "No melody notes extracted"
+
+            melody_midi_path = job_dir / "melody.mid"
+            import pretty_midi
+
+            pm = pretty_midi.PrettyMIDI()
+            instrument = pretty_midi.Instrument(program=0)
+            for note in melody_notes:
+                midi_note = pretty_midi.Note(
+                    velocity=note.velocity,
+                    pitch=note.pitch,
+                    start=note.onset,
+                    end=note.onset + note.duration,
+                )
+                instrument.notes.append(midi_note)
+            pm.instruments.append(instrument)
+            pm.write(str(melody_midi_path))
+            assert melody_midi_path.exists(), "melody.mid not created"
+            print(f"  OK Melody extracted: {len(melody_notes)} notes")
+
+            # Step 3: Audio analysis
+            print("Step 3: Analyzing audio...")
+            analysis = analyze_audio(input_mp3)
+            assert "bpm" in analysis, "BPM not detected"
+            assert "key" in analysis, "Key not detected"
+            assert "chords" in analysis, "Chords not detected"
+
+            analysis_path = job_dir / "analysis.json"
+            with open(analysis_path, "w") as f:
+                json.dump(analysis, f, indent=2)
+            print(
+                f"  OK Analysis complete: BPM={analysis['bpm']:.1f}, Key={analysis['key']}"
+            )
+
+            # Step 4: Generate difficulty sheets
+            print("Step 4: Generating difficulty sheets...")
+            sheets = generate_all_sheets(job_dir, melody_midi_path, analysis)
+
+            for difficulty in ["easy", "medium", "hard"]:
+                sheet_path = job_dir / f"sheet_{difficulty}.musicxml"
+                assert sheet_path.exists(), f"sheet_{difficulty}.musicxml not created"
+                assert sheet_path.stat().st_size > 0, (
+                    f"sheet_{difficulty}.musicxml is empty"
+                )
+            print(f"  OK All difficulty sheets generated")
+
+            # Step 5: Compare with reference
+            print("Step 5: Comparing with reference MusicXML...")
+            generated_mxl = job_dir / "sheet_medium.musicxml"
+            assert generated_mxl.exists(), "sheet_medium.musicxml not created"
+
+            result = compare_musicxml(str(reference_mxl), str(generated_mxl))
+
+            print(f"\nComparison Result for {song_dir}:")
+            print(f"  Similarity: {result['similarity']:.2%}")
+            print(f"  Passed: {result['passed']}")
+            print(f"  Ref notes: {result['details']['ref_note_count']}")
+            print(f"  Gen notes: {result['details']['gen_note_count']}")
+            print(f"  Matched: {result['details']['matched_notes']}")
+
+            # Step 6: Assert similarity threshold
+            assert result["similarity"] >= 0.85, (
+                f"Similarity {result['similarity']:.2%} below threshold 85%"
+            )
+
+            elapsed = time.time() - start_time
+            print(f"\nSUCCESS: {song_dir}")
+            print(f"   Processing time: {elapsed:.2f}s")
+            print(f"   Similarity: {result['similarity']:.2%}")
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            print(f"\nFAILED: {song_dir}")
+            print(f"   Error: {str(e)}")
+            print(f"   Time before failure: {elapsed:.2f}s")
+            raise

@@ -12,6 +12,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "smoke: Smoke test - checks processing success only"
     )
+    config.addinivalue_line(
+        "markers", "compare: Compare test - validates against reference MusicXML"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -46,3 +49,13 @@ def job_storage_path(tmp_path):
     storage = tmp_path / "test_jobs"
     storage.mkdir(exist_ok=True)
     return storage
+
+
+@pytest.fixture(scope="session")
+def golden_data_dir():
+    """Golden test data directory"""
+    # In Docker: /app/tests/golden/data/
+    data_dir = Path(__file__).parent / "data"
+    if not data_dir.exists():
+        pytest.skip("Golden data directory not found")
+    return data_dir
