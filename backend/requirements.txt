@@ -1,6 +1,9 @@
+torch==2.0.1
+torchaudio==2.0.2
+piano-transcription-inference>=0.0.5
+numpy<2
 fastapi==0.104.1
 uvicorn==0.24.0
-basic-pitch==0.3.0
 music21==9.1.0
 librosa==0.10.0
 yt-dlp>=2026.1.31
