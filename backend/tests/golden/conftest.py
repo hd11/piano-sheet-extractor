@@ -15,6 +15,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "compare: Compare test - validates against reference MusicXML"
     )
+    config.addinivalue_line(
+        "markers", "melody: Melody comparison test - validates melody extraction"
+    )
 
 
 @pytest.fixture(scope="session")
