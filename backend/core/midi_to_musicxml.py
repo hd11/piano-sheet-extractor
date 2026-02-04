@@ -184,6 +184,10 @@ def stream_to_musicxml(stream: music21.stream.Stream) -> str:
             if element.duration.quarterLength <= 0:
                 element.duration.quarterLength = 0.5  # Default to 8th note
 
+        # Always normalize notation/measures before export
+        stream = stream.makeMeasures(inPlace=False)
+        stream = stream.makeNotation(inPlace=False)
+
         # Stream을 MusicXML 파일로 작성
         stream.write("musicxml", fp=temp_path)
 
