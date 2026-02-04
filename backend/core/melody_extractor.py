@@ -24,7 +24,7 @@ def apply_skyline(notes: List[Note]) -> List[Note]:
     Returns:
         Skyline 적용된 Note 리스트
     """
-    ONSET_TOLERANCE = 0.1  # 100ms 이내는 동시 발음으로 간주
+    ONSET_TOLERANCE = 0.2  # 200ms 이내는 동시 발음으로 간주
 
     if not notes:
         return notes
