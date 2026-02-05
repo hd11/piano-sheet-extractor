@@ -291,7 +291,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ## TODOs
 
-- [ ] 0. Pop2Piano 검증 + Music2MIDI 재스파이크 (Gate — v3 핵심 변경)
+- [x] 0. Pop2Piano 검증 + Music2MIDI 재스파이크 (Gate — v3 핵심 변경)
 
   **Overview**: 3개 내부 Phase로 구성. Pop2Piano 먼저 검증 → Music2MIDI 정찰 → Music2MIDI 스파이크.
 
