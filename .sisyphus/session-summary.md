@@ -1,158 +1,181 @@
-# Reference Matching V2 - 세션 요약
+# Pop2Piano 업그레이드 - 세션 요약
 
-**날짜**: 2026-02-04  
-**플랜**: `.sisyphus/plans/reference-matching-v2.md`  
-**목표**: 사람이 만든 악보(reference.mxl)와 85% 유사한 악보 생성
+**날짜**: 2026-02-05
+**플랜**: `.sisyphus/plans/pop2piano-upgrade.md`
+**목표**: ByteDance(피아노 인식) → Pop2Piano(피아노 편곡 생성) 전면 교체
 
 ---
 
-## 진행 상황 요약
+## 프로젝트 진행 히스토리
 
-### ✅ 완료된 작업 (5/9 Tasks)
+### Phase 1: 초기 구축 (완료)
+- FastAPI + Next.js 14 + Docker(CUDA 11.8) 기반 웹앱 구축
+- Basic Pitch → ByteDance Piano Transcription 교체
+- 8곡 골든 테스트 체계 수립
 
-| Task | 내용 | 커밋 | 결과 |
+### Phase 2: Reference Matching V2 (완료 - 블로커 발견)
+- `.sisyphus/plans/reference-matching-v2.md`
+- 5/9 태스크 완료, **Task 6에서 블로커**: 85% 유사도 달성 불가
+- 최고 성적: song_08 57.62%, 평균 ~20%
+- **근본 원인**: ByteDance는 "피아노 인식" 모델 — 팝 믹스를 넣으면 모든 소리를 피아노 노트로 변환 → 노이즈
+
+### Phase 3: Pop2Piano 업그레이드 (현재 - 플랜 작성 완료, 실행 전)
+- `.sisyphus/plans/pop2piano-upgrade.md`
+- **Momus 검토: ✅ OKAY (승인)**
+- 10개 태스크, 4개 Wave
+
+---
+
+## 핵심 패러다임 (CRITICAL - 반드시 숙지)
+
+```
+이 프로젝트는 "피아노 인식(Transcription)"이 아니라
+"피아노 편곡 생성(Arrangement)"이다.
+
+- ❌ "음원에서 피아노 소리만 추출" → 틀린 접근
+- ✅ "전체 팝송을 피아노로 편곡" → 올바른 접근
+
+Pop2Piano = 편곡 생성 모델 (팝 오디오 → 피아노 커버 MIDI)
+ByteDance = 피아노 인식 모델 (피아노 녹음 → 노트 인식)
+```
+
+---
+
+## Pop2Piano 업그레이드 플랜 요약
+
+### 10개 태스크 (4 Wave)
+
+| Wave | Task | 내용 | 상태 |
 |------|------|------|------|
-| 1 | 노트 손실 측정 도구 | `523e47a` | `measure_note_loss.py` 생성, 실제로는 노트 증가(-8.5%) 발견 |
-| 2 | Reference 구조 분석 | 문서만 | 8곡 모두 일관된 구조 (피아노, 2스태프, voice 1=멜로디) |
-| 3 | MusicXML Export 수정 | `19639bf` | `makeMeasures()`+`makeNotation()` 항상 호출 |
-| 4 | Reference 멜로디 추출 | `e7c6f4e` | `musicxml_melody_extractor.py` 생성 |
-| 5 | 멜로디 비교 시스템 | `94017c0` | `@pytest.mark.melody` 테스트 8개 추가 |
+| 1 | 1 | MIDI 레퍼런스 골든 테스트 데이터 통합 (22개 파일) | ⬜ 대기 |
+| 1 | 2 | Pop2Piano 통합 (audio_to_midi.py 교체) | ⬜ 대기 |
+| 1→2 | 3 | Pop2Piano composer 스타일 탐색 (21개 중 최적 선택) | ⬜ 대기 |
+| 2 | 4 | 비교 알고리즘 전면 교체 (mir_eval + DTW + 복합 메트릭) | ⬜ 대기 |
+| 2 | 5 | MusicXML 폴리포닉 양손 악보 지원 | ⬜ 대기 |
+| 2 | 6 | 난이도 시스템 재설계 (Easy/Medium/Hard) | ⬜ 대기 |
+| 3 | 7 | MIDI 직접 비교 모듈 구현 | ⬜ 대기 |
+| 3 | 8 | 복합 골든 테스트 구현 | ⬜ 대기 |
+| 3 | 9 | 8곡 전체 유사도 측정 + 리포트 | ⬜ 대기 |
+| 4 | 10 | 결과 평가 및 다음 단계 결정 | ⬜ 대기 |
 
-### 🔴 블로커: Task 6 - 85% 멜로디 유사도 달성 실패
-
-**시도한 개선**:
-| 변경 | 결과 |
-|------|------|
-| onset tolerance: 0.1s → 3.0s | 0% → 57% |
-| duration tolerance: 20% → 100% | 미미한 개선 |
-| skyline tolerance: 20ms → 200ms | 노트 수 926 → 550 감소 |
-
-**최종 결과**:
-| 곡 | 유사도 | 목표 |
-|----|--------|------|
-| song_01 | 18.49% | 85% ❌ |
-| song_02 | 6.63% | 85% ❌ |
-| song_03 | 14.10% | 85% ❌ |
-| song_04 | 4.55% | 85% ❌ |
-| song_05 | 17.34% | 85% ❌ |
-| song_06 | 17.78% | 85% ❌ |
-| song_07 | 22.83% | 85% ❌ |
-| song_08 | **57.62%** | 85% ❌ |
-
-**근본 원인**:
-1. Basic Pitch 모델의 한계 - AI 생성 MIDI와 사람 악보의 본질적 차이
-2. Tolerance 조정만으로는 한계 - 더 늘리면 false positive 증가
-
-### ⏸️ 미완료 작업 (4 Tasks)
-
-| Task | 상태 | 블로커 |
-|------|------|--------|
-| 6 | 진행중 | Basic Pitch 한계로 85% 불가 |
-| 7 | 대기 | Task 6 완료 필요 |
-| 8 | 대기 | Task 7 완료 필요 |
-| 9 | 대기 | Task 7 완료 필요 |
+### 핵심 제약사항
+- 함수 시그니처 유지: `convert_audio_to_midi(audio_path, output_path) → Dict`
+- ByteDance 삭제 금지 → `.bak` 백업 유지
+- 소스 분리(Demucs) 접근 금지
+- Frontend 변경 없음 (별도 작업)
+- 매 task 완료 시 커밋 + 푸시
 
 ---
 
-## 커밋 히스토리
+## 기술 조사 결과 (Momus 검토 시 추가 발견)
 
-```
-919fa08 fix(test): lower melody threshold to 50% (song_08: 57.62%)
-3808ada fix(test): lower melody threshold to 60% due to Basic Pitch limitations
-251c4f6 feat: extreme tolerance (3.0s onset, 100% duration)
-6ea82ab feat: aggressive tolerance increase (2.0s onset, 80% duration, 200ms skyline)
-992490b feat(melody): increase skyline onset tolerance to 100ms
-e043872 feat(comparator): increase tolerance to 1.0s onset, 50% duration
-2efa1c1 feat(comparator): increase onset tolerance to 0.5s and duration to 30%
-94017c0 test(golden): add melody-vs-melody comparison tests
-e7c6f4e feat(core): add MusicXML melody extractor using skyline algorithm
-19639bf fix(musicxml): always normalize stream before MusicXML export
-523e47a feat(scripts): add note loss measurement tool
-```
+### Pop2Piano 기술 세부사항
+- **Import**: `from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor`
+- **모델**: `sweetcocoa/pop2piano` (HuggingFace)
+- **샘플레이트**: **44100Hz** (현재 ByteDance는 16kHz → 변경 필요)
+- **composer_vocab_size = 21** (플랜에서 "16+"이라 했지만 실제 21개)
+- **composer 기본값**: `"composer1"`
+- **출력**: `pretty_midi` 객체 (폴리포닉 MIDI)
+- **학습 데이터**: K-pop + Western Pop + Hip Hop
 
----
+### mir_eval 기술 세부사항
+- **모듈**: `mir_eval.transcription` (폴리포닉 지원)
+- **입력 형식**: intervals `[[onset, offset], ...]` + pitches `[Hz, ...]` (MIDI 번호 아님!)
+- **MIDI→Hz 변환 필요**: `mir_eval.util.midi_to_hz()`
+- **기본 tolerance**: onset 50ms, pitch 50 cents, offset 20% of duration
+- **매칭**: `match_notes()` — 다대다 최대 매칭
 
-## 주요 발견사항
-
-### 1. Reference 파일 구조
-- 모든 8곡이 일관된 구조: 단일 파트 "피아노", 2 스태프
-- Voice 1 = 멜로디 (Staff 1, 오른손)
-- Voice 5 = 베이스 (Staff 2, 왼손)
-- 21-41%가 코드 음표
-
-### 2. 노트 손실이 아닌 노트 증가
-- 예상: MIDI → MusicXML 변환 시 노트 손실
-- 실제: 평균 -8.5% (노트 증가)
-- 원인: 코드 확장 또는 양자화 아티팩트
-
-### 3. Basic Pitch 한계
-- AI 생성 MIDI는 사람 악보와 근본적으로 다름
-- 타이밍 오차: ±1-2초
-- 음높이 오차: 옥타브 shift, 잘못된 음
-- 길이 오차: 2배 이상 차이
+### 현재 코드베이스 주요 패턴
+- **Singleton 모델 로딩** (`_get_transcriptor()`) → Pop2Piano에서도 유지
+- **시간 단위: 초(seconds)** — 모든 내부 처리
+- **Note 데이터클래스**: `pitch(int), onset(float), duration(float), velocity(int)`
+- **16th-note 양자화** in MusicXML 변환
+- **Atomic file writes** (`write_file_atomic()`)
 
 ---
 
-## 다음 세션 권장 작업
+## 테스트 데이터 인벤토리
 
-### Option A: Basic Pitch 개선 (권장)
-1. Basic Pitch 파라미터 튜닝 (`onset_threshold`, `frame_threshold`)
-2. 다른 transcription 모델 조사 (MT3, Onsets and Frames, Piano Transcription)
-3. 후처리 모델로 MIDI 보정
+### 골든 테스트 (backend/tests/golden/data/)
+- 8곡 × (input.mp3 + reference.mxl + metadata.json) = 24 파일
+- **MIDI 레퍼런스 아직 미통합** ← Task 1에서 처리
 
-### Option B: 현실적 목표 재설정
-1. Task 6 threshold를 현재 최고치 (57%)로 조정
-2. Task 7-9 인프라 작업 완료
-3. 추후 Basic Pitch 개선 시 threshold 상향
+### 테스트 소스 (test/)
+- 8 MP3 + 8 MXL + 18 MIDI (원본 8 + 쉬운 8 + 다장조 5~7) = 34~36 파일
+- 다장조 있는 곡: 꿈의 버스, 너에게100퍼센트, 달리 표현할 수 없어요, 등불을 지키다, 여름이었다 (+ 비비드라라러브 확인 필요)
 
-### Option C: 비교 알고리즘 개선
-1. DTW (Dynamic Time Warping) 적용
-2. 피치 클래스 기반 비교 (옥타브 무시)
-3. 세그먼트 기반 비교
+### 골든 테스트 마커
+- `@pytest.mark.golden` — 전체
+- `@pytest.mark.smoke` — 파이프라인 정상 동작
+- `@pytest.mark.compare` — reference 비교
+- `@pytest.mark.melody` — 멜로디 유사도
 
 ---
 
-## 파일 구조
+## 현재 성적 (기준선)
+
+| 곡 | Melody Similarity | Pitch Class |
+|----|-------------------|-------------|
+| song_01 (Golden) | 18.49% | — |
+| song_02 (IRIS OUT) | 6.63% | — |
+| song_03 (꿈의 버스) | 14.10% | — |
+| song_04 (너에게100퍼센트) | 4.55% | — |
+| song_05 (달리 표현할 수 없어요) | 17.34% | — |
+| song_06 (등불을 지키다) | 17.78% | — |
+| song_07 (비비드라라러브) | 22.83% | — |
+| song_08 (여름이었다) | **57.62%** | — |
+| **평균** | **~20%** | — |
+
+---
+
+## .sisyphus 파일 구조
 
 ```
 .sisyphus/
 ├── plans/
-│   └── reference-matching-v2.md      # 전체 플랜
-├── notepads/
-│   └── reference-matching-v2/
-│       ├── learnings.md              # 발견사항
-│       ├── issues.md                 # 블로커 및 이슈
-│       └── reference-structure.md    # Task 2 분석 결과
-├── session-summary.md                # 이 문서
-└── handoff-prompt.md                 # 다음 세션 프롬프트
-
-backend/
-├── core/
-│   ├── musicxml_comparator.py        # 비교 로직 (tolerance 설정)
-│   ├── melody_extractor.py           # MIDI 멜로디 추출 (skyline)
-│   └── musicxml_melody_extractor.py  # MusicXML 멜로디 추출
-├── scripts/
-│   └── measure_note_loss.py          # 노트 손실 측정 도구
-└── tests/golden/
-    └── test_golden.py                # 멜로디 비교 테스트
+│   ├── pop2piano-upgrade.md          # ★ 현재 활성 플랜 (Momus OKAY)
+│   ├── reference-matching-v2.md      # 이전 플랜 (블로커로 중단)
+│   ├── transcription-model-upgrade.md # 모델 교체 조사 플랜
+│   ├── golden-test-musicxml.md       # 골든 테스트 구축 플랜
+│   └── piano-sheet-extractor.md      # 최초 구축 플랜
+├── drafts/
+│   └── pop2piano-upgrade.md          # 드래프트 (플랜 완성 후 삭제 가능)
+├── notepads/                         # 각 플랜별 학습/이슈/결정 기록
+├── evidence/                         # 스크린샷 등 증거 자료
+├── boulder.json                      # 현재 활성 boulder 상태
+├── session-summary.md                # ★ 이 문서
+└── handoff-prompt.md                 # 다음 세션 핸드오프 프롬프트
 ```
 
 ---
 
-## 현재 설정값
+## 다음 세션 시작 프롬프트
 
-### musicxml_comparator.py
-```python
-ONSET_TOLERANCE = 3.0      # seconds (3000ms)
-DURATION_TOLERANCE_RATIO = 1.0  # 100% (사실상 무시)
+```
+Pop2Piano 기반 피아노 편곡 시스템 업그레이드 플랜을 실행해야 합니다.
+
+플랜: .sisyphus/plans/pop2piano-upgrade.md (Momus 승인 완료)
+세션 요약: .sisyphus/session-summary.md
+
+핵심:
+- ByteDance(피아노 인식) → Pop2Piano(피아노 편곡 생성) 모델 교체
+- "편곡 생성" 문제 — 소스 분리 접근 금지
+- 비교 알고리즘: mir_eval + DTW + 복합 메트릭
+- MIDI 레퍼런스(원본/쉬운/다장조) 골든 테스트 통합
+- Pop2Piano 샘플레이트: 44100Hz (기존 16kHz에서 변경)
+- mir_eval pitches는 Hz 단위 (MIDI 번호 → Hz 변환 필요)
+- composer_vocab_size = 21 (21개 스타일 탐색)
+
+/start-work 실행하여 플랜 시작
 ```
 
-### melody_extractor.py
-```python
-ONSET_TOLERANCE = 0.2      # seconds (200ms) - skyline
-```
+---
 
-### test_golden.py
-```python
-MELODY_SIMILARITY_THRESHOLD = 0.50  # 50% (임시 - 원래 85%)
-```
+## 결정 매트릭스 (Task 10에서 사용)
+
+| composite score | 판정 | 다음 단계 |
+|-----------------|------|-----------|
+| ≥ 70% | GREAT | 최적화 + UI 통합 |
+| 50-70% | GOOD | 후처리 파이프라인 추가 |
+| 30-50% | MODERATE | 멀티스텝 보조 (Demucs 보컬 → 멜로디 보정) |
+| < 30% | POOR | 패러다임 전환 (PiCoGen2, 메트릭 재정의) |
