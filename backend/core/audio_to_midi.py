@@ -143,7 +143,7 @@ def convert_audio_to_midi(audio_path: Path, output_path: Path) -> Dict[str, Any]
             try:
                 model_output = model.generate(
                     input_features=inputs["input_features"],
-                    composer="composer1",  # Default composer style
+                    composer="composer5",  # Best style per mir_eval composite (51.96% vs composer1's 48.38%)
                 )
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
@@ -153,7 +153,7 @@ def convert_audio_to_midi(audio_path: Path, output_path: Path) -> Dict[str, Any]
                     _device = "cpu"
                     inputs = inputs.to("cpu")
                     model_output = model.generate(
-                        input_features=inputs["input_features"], composer="composer1"
+                        input_features=inputs["input_features"], composer="composer5"
                     )
                 else:
                     raise
