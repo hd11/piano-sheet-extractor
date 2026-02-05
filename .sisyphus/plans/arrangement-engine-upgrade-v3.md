@@ -642,7 +642,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ---
 
-- [ ] 2. 편곡 모델 통합 (audio_to_midi.py 확정)
+- [x] 2. 편곡 모델 통합 (audio_to_midi.py 확정)
 
   > **⚠️ 조건부 태스크**: Task 0 결과에 따라 경로 A 또는 B 실행
 
@@ -769,7 +769,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ---
 
-- [ ] 3. Pop2Piano composer 스타일 탐색 (NO-GO 경로만)
+- [x] 3. Pop2Piano composer 스타일 탐색 (NO-GO 경로만)
 
   > **⚠️ Task 0 = NO-GO일 때만 실행. GO일 때는 SKIP.**
 
