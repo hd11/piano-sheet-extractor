@@ -4,18 +4,15 @@
 이 모듈은 폴리포닉 피아노 편곡을 3단계 난이도 (easy, medium, hard)로 조절하고,
 코드 심볼을 추가한 후 MusicXML 파일로 저장합니다.
 
-v2 (Pop2Piano polyphonic arrangement):
-| Rule             | Easy                | Medium              | Hard           |
-|------------------|---------------------|---------------------|----------------|
-| Content          | Melody only (RH)    | Melody + simple LH  | Full arrange   |
-| Quantize grid    | 1 beat (초)         | 0.5 beat (초)       | 0.25 beat      |
-| Min note dur     | 0.5초               | 0.25초              | 0.125초        |
-| Pitch range      | C4-C5 (60-72)       | C3-G5 (48-79)       | Original       |
-| Max simultaneous | 1 (monophonic)      | 3                   | Original       |
-| Score format     | Single staff        | Two-hand piano      | Two-hand piano |
-| Fast passages    | Remove              | Simplify            | Keep           |
+v3 (Heuristic-based difficulty – NO Music2MIDI):
+| Level  | Content                         | Algorithm                                |
+|--------|---------------------------------|------------------------------------------|
+| Easy   | Melody only (RH skyline)        | Skyline → filter_short → resolve_overlap |
+| Medium | Melody + simplified bass (LH)   | Skyline melody + lowest-note-per-beat LH |
+| Hard   | Full Pop2Piano arrangement      | Passthrough (no reduction)               |
 """
 
+import math
 from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
@@ -32,11 +29,129 @@ from core.midi_to_musicxml import (
     stream_to_musicxml,
 )
 
+# Hand-split threshold (MIDI note number): >= threshold → RH, < threshold → LH
+HAND_SPLIT = 60  # C4
+
+
+# ── Public 3-level API ──────────────────────────────────────────────
+
+
+def generate_easy_difficulty(notes: List[Note]) -> List[Note]:
+    """
+    Easy: Melody extraction using skyline algorithm.
+
+    Pipeline (reuses melody_extractor.py functions):
+      1. Skyline – keep highest note per simultaneous group
+      2. Filter short notes (< 50ms)
+      3. Resolve overlaps
+
+    Result is a monophonic melodic line suitable for single-staff display.
+
+    Args:
+        notes: Full polyphonic Note list from Pop2Piano output.
+
+    Returns:
+        Melody-only Note list (monophonic).
+    """
+    work = deepcopy(notes)
+    melody = apply_skyline(work)
+    melody = filter_short_notes(melody)
+    melody = resolve_overlaps(melody)
+    return melody
+
+
+def generate_medium_difficulty(notes: List[Note], beat_sec: float = 0.5) -> List[Note]:
+    """
+    Medium: Melody (RH) + simplified bass accompaniment (LH).
+
+    RH: Skyline melody (same pipeline as Easy).
+    LH: Simplified bass line – keep only the lowest note per beat window
+         among notes with pitch < HAND_SPLIT (C4).
+
+    Args:
+        notes: Full polyphonic Note list.
+        beat_sec: Beat duration in seconds (default 0.5 = 120 BPM quarter).
+                  Used to determine the beat-window size for LH simplification.
+
+    Returns:
+        Combined melody + simplified-bass Note list.
+    """
+    work = deepcopy(notes)
+
+    # ── RH: skyline melody ──
+    melody = apply_skyline(work)
+    melody = filter_short_notes(melody)
+    melody = resolve_overlaps(melody)
+
+    # ── LH: simplified bass ──
+    lh_notes = [n for n in deepcopy(notes) if n.pitch < HAND_SPLIT]
+    bass = _simplify_bass(lh_notes, beat_sec)
+
+    # Combine and sort by onset
+    combined = melody + bass
+    combined.sort(key=lambda n: (n.onset, n.pitch))
+    return combined
+
+
+def generate_hard_difficulty(notes: List[Note]) -> List[Note]:
+    """
+    Hard: Full Pop2Piano arrangement (passthrough).
+
+    No reduction – returns a deep copy of the original notes.
+
+    Args:
+        notes: Full polyphonic Note list.
+
+    Returns:
+        Complete polyphonic Note list (deep copy).
+    """
+    return deepcopy(notes)
+
+
+# ── Internal helpers ──────────────────────────────────────────────────
+
+
+def _simplify_bass(lh_notes: List[Note], beat_sec: float) -> List[Note]:
+    """
+    Simplify left-hand notes by keeping only the lowest note per beat window.
+
+    Groups notes into beat-sized windows, then selects the lowest-pitched
+    note from each window. This produces a sparse, root-note-style bass line.
+
+    Args:
+        lh_notes: Left-hand notes (pitch < HAND_SPLIT).
+        beat_sec: Beat duration in seconds for window grouping.
+
+    Returns:
+        Simplified bass Note list (one note per beat window max).
+    """
+    if not lh_notes or beat_sec <= 0:
+        return []
+
+    # Group by beat window
+    by_beat: Dict[int, List[Note]] = defaultdict(list)
+    for n in lh_notes:
+        beat_idx = int(math.floor(n.onset / beat_sec))
+        by_beat[beat_idx].append(n)
+
+    # Keep lowest note per beat
+    result = []
+    for _beat_idx, group in sorted(by_beat.items()):
+        lowest = min(group, key=lambda n: n.pitch)
+        result.append(lowest)
+
+    return result
+
+
+# ── Legacy wrapper (backward-compatible) ─────────────────────────────
+
 
 def adjust_difficulty(notes: List[Note], level: str, bpm: float) -> List[Note]:
     """
     Adjust note list to match difficulty level.
     All time units are in seconds.
+
+    Delegates to the 3-level heuristic functions.
 
     Args:
         notes: List[Note] - 원본 Note 리스트 (초 단위 시간)
@@ -45,72 +160,15 @@ def adjust_difficulty(notes: List[Note], level: str, bpm: float) -> List[Note]:
 
     Returns:
         List[Note]: 난이도 조절된 Note 리스트
-
-    Note:
-        - hard: 원본 폴리포닉 편곡 그대로 (deepcopy)
-        - medium: 멜로디 + 간소화된 LH (동시 발음 3개 제한)
-        - easy: 멜로디만 (skyline → 모노포닉)
     """
-    # Always create a deep copy to avoid mutating original notes
-    adjusted = deepcopy(notes)
-
-    beat_sec = 60.0 / bpm  # 1 beat in seconds
+    beat_sec = 60.0 / bpm
 
     if level == "easy":
-        # Easy: melody only via skyline algorithm
-        melody = apply_skyline(adjusted)
-        melody = filter_short_notes(melody)
-        melody = resolve_overlaps(melody)
-
-        # Additional simplification
-        quantize_grid = beat_sec  # quarter note
-        min_duration = 0.5  # seconds
-        octave_range = (60, 72)  # C4-C5
-
-        # Remove short notes
-        filtered = [n for n in melody if n.duration >= min_duration]
-
-        # Quantize
-        for note in filtered:
-            note.onset = round(note.onset / quantize_grid) * quantize_grid
-
-        # Octave adjustment
-        for note in filtered:
-            while note.pitch < octave_range[0]:
-                note.pitch += 12
-            while note.pitch > octave_range[1]:
-                note.pitch -= 12
-
-        # Monophonic (1 note at a time)
-        filtered = limit_simultaneous_notes(filtered, 1)
-        return filtered
-
+        return generate_easy_difficulty(notes)
     elif level == "medium":
-        quantize_grid = beat_sec / 2  # 8th note
-        min_duration = 0.25  # seconds
-        octave_range = (48, 79)  # C3-G5
-        max_simultaneous = 3
-
-        # Remove short notes
-        filtered = [n for n in adjusted if n.duration >= min_duration]
-
-        # Quantize
-        for note in filtered:
-            note.onset = round(note.onset / quantize_grid) * quantize_grid
-
-        # Octave adjustment
-        for note in filtered:
-            while note.pitch < octave_range[0]:
-                note.pitch += 12
-            while note.pitch > octave_range[1]:
-                note.pitch -= 12
-
-        # Limit simultaneous notes
-        filtered = limit_simultaneous_notes(filtered, max_simultaneous)
-        return filtered
-
+        return generate_medium_difficulty(notes, beat_sec=beat_sec)
     else:  # hard
-        return adjusted  # keep original (already deep copied)
+        return generate_hard_difficulty(notes)
 
 
 def limit_simultaneous_notes(notes: List[Note], max_count: int) -> List[Note]:

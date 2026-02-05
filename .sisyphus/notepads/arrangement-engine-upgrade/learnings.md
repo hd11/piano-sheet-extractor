@@ -193,3 +193,38 @@
 - Polyphonic helpers (`split_hands`, `notes_to_piano_score`, `notes_to_piano_musicxml`) were already in the file from a prior partial implementation
 - This task added the missing `convert_midi_to_musicxml()` file-level API that connects MIDI parsing → polyphonic conversion → file output
 - Also added `parse_midi` import and `pretty_midi` (lazy import in function) for BPM extraction
+
+## Task 6-B: Difficulty System Redesign (Heuristic) (2026-02-05)
+
+### Implementation
+- Easy: Skyline melody extraction (reused from )
+  - Pipeline: apply_skyline -> filter_short_notes -> resolve_overlaps
+  - Produces monophonic melodic line
+- Medium: Melody + simplified bass (lowest note per beat window)
+  - RH: Same skyline pipeline as Easy
+  - LH: Group notes with pitch < 60 (C4) by beat window, keep lowest per window
+  -  helper function with configurable beat_sec
+- Hard: Full Pop2Piano output (passthrough via deepcopy)
+
+### song_01 Results
+- Easy: 649 notes (melody only)
+- Medium: 970 notes (melody + simplified bass)
+- Hard: 1746 notes (full arrangement)
+- Monotonic: Easy < Medium < Hard confirmed
+
+### Comparison with reference_easy.mid
+- reference_easy.mid: 1177 notes
+- Generated easy: 649 notes (55% of reference)
+- Our Easy is more aggressive than the human reference
+  - Human reference likely keeps some harmonic notes and octave doublings
+  - Our skyline is pure top-note extraction with overlap resolution
+
+### Architecture Decisions
+- 3 standalone functions: generate_easy_difficulty, generate_medium_difficulty, generate_hard_difficulty
+- Legacy adjust_difficulty() preserved as wrapper (backward-compatible)
+- HAND_SPLIT constant at MIDI 60 (C4) for RH/LH separation
+- No BPM dependency for Easy/Hard; Medium uses beat_sec for bass windowing
+- melody_extractor.py untouched (reused apply_skyline, filter_short_notes, resolve_overlaps)
+- Removed old quantization, octave clamping, and limit_simultaneous_notes from Easy/Medium
+  - These were v2 heuristics that over-simplified the output
+  - v3 relies on skyline quality directly from melody_extractor
