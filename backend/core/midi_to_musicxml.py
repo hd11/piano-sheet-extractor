@@ -8,13 +8,16 @@ Task 7 (난이도 조절)에서 이 모듈의 notes_to_stream() 함수를 사용
 코드 심볼을 추가합니다.
 """
 
+import logging
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import music21
 
-from core.midi_parser import Note
+from core.midi_parser import Note, parse_midi
+
+logger = logging.getLogger(__name__)
 
 
 def seconds_to_quarter_length(seconds: float, bpm: float) -> float:
@@ -402,3 +405,113 @@ def notes_to_piano_musicxml(
 
     score = notes_to_piano_score(notes, bpm, key, time_signature, split_point)
     return stream_to_musicxml(score)
+
+
+# ============================================================================
+# File-level Conversion API
+# ============================================================================
+
+
+def convert_midi_to_musicxml(
+    midi_path: Path,
+    output_path: Path,
+    polyphonic: bool = True,
+    split_threshold: int = 60,
+    bpm: Optional[float] = None,
+    key: str = "C major",
+    time_signature: str = "4/4",
+) -> Dict[str, Any]:
+    """
+    Convert a MIDI file to a MusicXML file.
+
+    This is the top-level convenience function that reads a MIDI file,
+    optionally splits notes into two hands, and writes a MusicXML file.
+
+    Args:
+        midi_path: Path to input MIDI file
+        output_path: Path to save MusicXML file
+        polyphonic: If True, create two-staff piano score (RH treble + LH bass).
+                    If False, create single-staff monophonic score.
+        split_threshold: MIDI pitch for RH/LH split (default 60 = middle C).
+                         Notes >= split_threshold → right hand (treble clef).
+                         Notes < split_threshold → left hand (bass clef).
+        bpm: Override BPM. If None, extracted from the MIDI file tempo map.
+             Falls back to 120 BPM if MIDI has no tempo information.
+        key: Key signature string (default "C major")
+        time_signature: Time signature string (default "4/4")
+
+    Returns:
+        Dictionary with conversion metadata:
+            - output_path: str path to generated MusicXML
+            - note_count: total number of notes
+            - rh_notes: number of right-hand notes (polyphonic only)
+            - lh_notes: number of left-hand notes (polyphonic only)
+            - polyphonic: whether polyphonic mode was used
+            - bpm: BPM used for conversion
+            - key: key signature used
+
+    Raises:
+        FileNotFoundError: If MIDI file does not exist
+    """
+    import pretty_midi as pm_lib
+
+    midi_path = Path(midi_path)
+    output_path = Path(output_path)
+
+    if not midi_path.exists():
+        raise FileNotFoundError(f"MIDI file not found: {midi_path}")
+
+    # Parse notes from MIDI
+    notes = parse_midi(midi_path)
+    logger.info(f"Parsed {len(notes)} notes from {midi_path}")
+
+    # Extract BPM from MIDI if not provided
+    if bpm is None:
+        pm = pm_lib.PrettyMIDI(str(midi_path))
+        tempo_changes = pm.get_tempo_changes()
+        if len(tempo_changes[1]) > 0:
+            bpm = float(tempo_changes[1][0])  # Use first tempo marking
+            logger.info(f"Extracted BPM from MIDI: {bpm}")
+        else:
+            bpm = 120.0  # Safe default
+            logger.info(f"No tempo in MIDI, using default BPM: {bpm}")
+
+    # Ensure output directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Generate MusicXML
+    if polyphonic:
+        musicxml_str = notes_to_piano_musicxml(
+            notes,
+            bpm,
+            key,
+            time_signature,
+            split_point=split_threshold,
+            polyphonic=True,
+        )
+        rh_notes, lh_notes = split_hands(notes, split_threshold)
+        rh_count = len(rh_notes)
+        lh_count = len(lh_notes)
+        logger.info(
+            f"Polyphonic mode: {rh_count} RH notes, {lh_count} LH notes "
+            f"(split at MIDI {split_threshold})"
+        )
+    else:
+        musicxml_str = notes_to_musicxml(notes, bpm, key, time_signature)
+        rh_count = len(notes)
+        lh_count = 0
+        logger.info(f"Monophonic mode: {len(notes)} notes")
+
+    # Write MusicXML to file
+    output_path.write_text(musicxml_str, encoding="utf-8")
+    logger.info(f"MusicXML written to {output_path}")
+
+    return {
+        "output_path": str(output_path),
+        "note_count": len(notes),
+        "rh_notes": rh_count,
+        "lh_notes": lh_count,
+        "polyphonic": polyphonic,
+        "bpm": bpm,
+        "key": key,
+    }

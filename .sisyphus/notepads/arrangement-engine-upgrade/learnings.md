@@ -161,3 +161,35 @@
 - Backend code is BAKED into Docker image (not volume-mounted)
 - Must `docker compose build backend` after code changes
 - Only test/, job-data, model-cache are volume-mounted
+
+## Task 5: MusicXML Polyphonic Two-Hand Support (2026-02-05)
+
+### Implementation
+- Added `convert_midi_to_musicxml()` top-level function: MIDI file → MusicXML file
+- Parameters: `polyphonic: bool = True`, `split_threshold: int = 60`
+- RH: TrebleClef, pitch >= 60; LH: BassClef, pitch < 60
+- 2-staff piano part structure via existing `notes_to_piano_score()`
+- BPM auto-extracted from MIDI tempo map (fallback: 120 BPM)
+
+### Backward Compatibility
+- Existing monophonic mode preserved when `polyphonic=False`
+- All existing functions (`notes_to_stream`, `notes_to_musicxml`, etc.) unchanged
+- Default is polyphonic (matches Pop2Piano output characteristics)
+- Function signature is additive — no breaking changes
+
+### Verification Results (song_01)
+- Total notes: 1746 (Pop2Piano output)
+- RH notes: 780, LH notes: 966 (split at MIDI 60)
+- music21 parses successfully
+- 2 staves confirmed: Part 0 = TrebleClef (962 notes incl. ties), Part 1 = BassClef (1137 notes incl. ties)
+- Monophonic fallback: 1 part, 1746 notes — verified
+
+### Note Count Discrepancy (780→962, 966→1137)
+- music21 `part.flat.notes` count includes tied notes created by `makeMeasures()`/`makeNotation()`
+- Notes spanning barlines get split into tied pairs, inflating the count
+- Raw split counts (780 RH, 966 LH) match expectations from the 1746 total
+
+### Architecture Note
+- Polyphonic helpers (`split_hands`, `notes_to_piano_score`, `notes_to_piano_musicxml`) were already in the file from a prior partial implementation
+- This task added the missing `convert_midi_to_musicxml()` file-level API that connects MIDI parsing → polyphonic conversion → file output
+- Also added `parse_midi` import and `pretty_midi` (lazy import in function) for BPM extraction
