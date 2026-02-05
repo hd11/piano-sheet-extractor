@@ -1,10 +1,17 @@
 # 피아노 편곡 엔진 업그레이드 - 세션 요약
 
-**날짜**: 2026-02-05 (v2 업데이트)
-**플랜**: `.sisyphus/plans/arrangement-engine-upgrade.md` (v2 — Music2MIDI 스파이크 + 조건부 분기)
+**날짜**: 2026-02-05 (v3 업데이트)
+**플랜**: `.sisyphus/plans/arrangement-engine-upgrade-v3.md` (v3 — Music2MIDI 재도전 + Pop2Piano 폴백, Momus OKAY)
 **목표**: ByteDance(피아노 인식) → Music2MIDI or Pop2Piano(피아노 편곡 생성) 전면 교체
 
-### ⚠️ v2 핵심 변경사항 (2026-02-05)
+### ⚠️ v3 핵심 변경사항 (2026-02-05)
+- **v2 스파이크 NO-GO**: CUDA 11.8, torch 2.0.1 환경에서 Music2MIDI 의존성 충돌
+- **환경 변경 발견**: Docker 이미지가 이미 `pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime`으로 업그레이드됨
+- **이전 NO-GO 원인 3/4 해소**: CUDA 12.1 ✅, torch >=2.2.0 ✅, torchaudio >=2.2.0 ✅
+- **v3 전략**: Pop2Piano 먼저 검증 → Music2MIDI 정찰 → 3단계 에스컬레이션 (4시간 타임박스)
+- **Metis + Momus 검증 완료**: 플랜 승인됨
+
+### v2 참고사항
 - **전수 조사**: 전 세계 "피아노 편곡 생성" 모델 5개 발견 (Etude, Music2MIDI, PiCoGen2, Pop2Piano, audio2midi)
 - **Music2MIDI** (MMM'25)가 Pop2Piano 능가 + **난이도 컨디셔닝 내장** (킬러 피처)
 - **PiCoGen2**: VRAM >16GB 필요 → 탈락, **Etude**: 코드 미공개 → 탈락

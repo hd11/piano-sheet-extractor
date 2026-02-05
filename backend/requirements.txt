@@ -2,6 +2,8 @@ torch>=2.2.0
 torchaudio>=2.2.0
 piano-transcription-inference>=0.0.5
 transformers>=4.35.0
+essentia==2.1b6.dev1034
+resampy>=0.4.0
 numpy<2
 fastapi==0.104.1
 uvicorn==0.24.0

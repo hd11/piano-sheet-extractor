@@ -1,4 +1,22 @@
 
+## Issue: Music2MIDI Token Generation Incompatibility (2026-02-05)
+
+### Problem
+Music2MIDI model generates tokens outside meaningful vocabulary range (334-399) when run on torch 2.2.0.
+The meaningful vocab range is 0-332. Tokenizer decodes out-of-range tokens to 0 notes.
+
+### Root Cause
+Likely numerical differences between torch 2.1 (training environment) and torch 2.2 (our environment).
+Model was trained with transformers 4.34.0; we have a newer version.
+
+### Impact
+Music2MIDI cannot be used as arrangement engine. NO-GO verdict.
+
+### Resolution
+Proceeding with Pop2Piano which is confirmed working.
+
+---
+
 ## Issue: Pop2Piano PyTorch Version Incompatibility (2026-02-05)
 
 ### Problem
