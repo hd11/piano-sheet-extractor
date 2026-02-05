@@ -1112,7 +1112,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ---
 
-- [ ] 8. 복합 골든 테스트 구현
+- [x] 8. 복합 골든 테스트 구현
 
   **What to do**:
   - `backend/tests/golden/test_golden.py` 확장:
