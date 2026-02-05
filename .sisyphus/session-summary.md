@@ -1,7 +1,7 @@
 # 피아노 편곡 엔진 업그레이드 - 세션 요약
 
 **날짜**: 2026-02-05 (v2 업데이트)
-**플랜**: `.sisyphus/plans/pop2piano-upgrade.md` (v2 — Music2MIDI 스파이크 + 조건부 분기)
+**플랜**: `.sisyphus/plans/arrangement-engine-upgrade.md` (v2 — Music2MIDI 스파이크 + 조건부 분기)
 **목표**: ByteDance(피아노 인식) → Music2MIDI or Pop2Piano(피아노 편곡 생성) 전면 교체
 
 ### ⚠️ v2 핵심 변경사항 (2026-02-05)
@@ -27,7 +27,7 @@
 - **근본 원인**: ByteDance는 "피아노 인식" 모델 — 팝 믹스를 넣으면 모든 소리를 피아노 노트로 변환 → 노이즈
 
 ### Phase 3: Pop2Piano 업그레이드 (현재 - 플랜 작성 완료, 실행 전)
-- `.sisyphus/plans/pop2piano-upgrade.md`
+- `.sisyphus/plans/arrangement-engine-upgrade.md`
 - **Momus 검토: ✅ OKAY (승인)**
 - 10개 태스크, 4개 Wave
 
@@ -140,13 +140,13 @@ ByteDance = 피아노 인식 모델 (피아노 녹음 → 노트 인식)
 ```
 .sisyphus/
 ├── plans/
-│   ├── pop2piano-upgrade.md          # ★ 현재 활성 플랜 (Momus OKAY)
+│   ├── arrangement-engine-upgrade.md # ★ 현재 활성 플랜 (Momus OKAY)
 │   ├── reference-matching-v2.md      # 이전 플랜 (블로커로 중단)
 │   ├── transcription-model-upgrade.md # 모델 교체 조사 플랜
 │   ├── golden-test-musicxml.md       # 골든 테스트 구축 플랜
 │   └── piano-sheet-extractor.md      # 최초 구축 플랜
 ├── drafts/
-│   └── pop2piano-upgrade.md          # 드래프트 (플랜 완성 후 삭제 가능)
+│   └── arrangement-engine-upgrade.md # 드래프트 (플랜 완성 후 삭제 가능)
 ├── notepads/                         # 각 플랜별 학습/이슈/결정 기록
 ├── evidence/                         # 스크린샷 등 증거 자료
 ├── boulder.json                      # 현재 활성 boulder 상태
@@ -161,7 +161,7 @@ ByteDance = 피아노 인식 모델 (피아노 녹음 → 노트 인식)
 ```
 Pop2Piano 기반 피아노 편곡 시스템 업그레이드 플랜을 실행해야 합니다.
 
-플랜: .sisyphus/plans/pop2piano-upgrade.md (Momus 승인 완료)
+플랜: .sisyphus/plans/arrangement-engine-upgrade.md (Momus 승인 완료)
 세션 요약: .sisyphus/session-summary.md
 
 핵심:
