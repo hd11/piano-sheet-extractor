@@ -228,3 +228,37 @@
 - Removed old quantization, octave clamping, and limit_simultaneous_notes from Easy/Medium
   - These were v2 heuristics that over-simplified the output
   - v3 relies on skyline quality directly from melody_extractor
+
+## Task 7: MIDI Direct Comparison Module (2026-02-05)
+
+### Implementation
+- Updated `backend/core/midi_comparator.py` to use `parse_midi()` SSOT from `midi_parser.py`
+- Function: `compare_midi(ref_path, gen_path)` → Dict with composite metrics
+- Reuses `NoteEvent` and `compute_composite_metrics()` from `comparison_utils.py`
+- No BPM conversion needed: MIDI notes from `parse_midi()` are already in seconds
+- Added `MidiComparisonError` exception class for proper error handling
+- Added `structural_similarity: {}` to output for API consistency with `musicxml_comparator`
+
+### Common Logic Extraction (Already Done in Task 3/4)
+- `comparison_utils.py` already existed with all shared utilities:
+  - `NoteEvent` dataclass, `compute_composite_metrics()`, mir_eval wrappers, DTW, chroma
+- Both `musicxml_comparator.py` and `midi_comparator.py` import from it
+- No duplication: MIDI comparator is ~170 lines total (mostly docstrings + error handling)
+
+### Verification Results
+- Self-comparison (reference.mid vs itself): composite_score = 100.00%
+  - All individual metrics = 1.0000 (melody_f1, chroma, onset_f1, etc.)
+  - 1897 notes in reference.mid
+- Original vs Easy (reference.mid vs reference_easy.mid): composite_score = 72.17%
+  - melody_f1 = 39.10%, melody_f1_lenient = 52.77%
+  - pitch_class_f1 = 76.45%, chroma_similarity = 99.09%
+  - onset_f1 = 67.92%
+  - ref: 1897 notes, gen: 1177 notes
+
+### Key Observations
+- Chroma similarity (99.09%) is very high even for original vs easy — both use the same key/harmonic content
+- Melody F1 (39.10%) reflects that easy arrangement drops many notes (1177 vs 1897)
+- Pitch class F1 (76.45%) is higher than melody F1 — octave differences exist in the arrangements
+- pretty_midi warns about "Tempo, Key or Time signature change events on non-zero tracks" — non-standard MIDI but parses fine
+- Without structural metadata, composite weights renormalize: melody_lenient 33.3%, pc 27.8%, chroma 22.2%, onset 16.7%
+
