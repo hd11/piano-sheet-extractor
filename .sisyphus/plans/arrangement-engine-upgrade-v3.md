@@ -154,11 +154,11 @@
 - `backend/tests/golden/test_golden.py` — MIDI 비교 테스트 추가
 
 ### Definition of Done
-- [ ] 편곡 모델(Music2MIDI or Pop2Piano)이 8곡 모두 MIDI 생성 성공
-- [ ] 복합 메트릭으로 8곡 유사도 측정 완료
-- [ ] MIDI 레퍼런스(원본/쉬운/다장조) 골든 테스트에 통합
-- [ ] 양손 피아노 MusicXML 악보 생성 성공
-- [ ] 난이도별(easy/medium/hard) 출력이 레퍼런스 변형과 비교 가능
+- [x] 편곡 모델(Music2MIDI or Pop2Piano)이 8곡 모두 MIDI 생성 성공
+- [x] 복합 메트릭으로 8곡 유사도 측정 완료
+- [x] MIDI 레퍼런스(원본/쉬운/다장조) 골든 테스트에 통합
+- [x] 양손 피아노 MusicXML 악보 생성 성공
+- [x] 난이도별(easy/medium/hard) 출력이 레퍼런스 변형과 비교 가능
 
 ### Must Have
 - 함수 시그니처 유지 (`convert_audio_to_midi(audio_path, output_path)`)
@@ -1286,14 +1286,14 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 ## Success Criteria
 
 ### Final Checklist
-- [ ] Task 0: Music2MIDI 재스파이크 완료 (GO/NO-GO 판정) — Pop2Piano 베이스라인 검증 포함
-- [ ] 편곡 모델 8곡 MIDI 생성 성공
-- [ ] MIDI 레퍼런스 골든 테스트 통합
-- [ ] 비교 알고리즘 mir_eval + DTW 교체
-- [ ] 복합 메트릭 출력 (melody_f1, pitch_class_f1, chroma, composite)
-- [ ] 양손 피아노 MusicXML 생성
-- [ ] 3단계 난이도 생성 (Easy/Medium/Hard)
-- [ ] MIDI 직접 비교 모듈
-- [ ] 복합 골든 테스트 (MXL + MIDI 원본/쉬운/다장조)
-- [ ] 8곡 전체 유사도 리포트
-- [ ] 기존 ByteDance(20.31%) 대비 개선 확인
+- [x] Task 0: Music2MIDI 재스파이크 완료 (GO/NO-GO 판정) — Pop2Piano 베이스라인 검증 포함
+- [x] 편곡 모델 8곡 MIDI 생성 성공
+- [x] MIDI 레퍼런스 골든 테스트 통합
+- [x] 비교 알고리즘 mir_eval + DTW 교체
+- [x] 복합 메트릭 출력 (melody_f1, pitch_class_f1, chroma, composite)
+- [x] 양손 피아노 MusicXML 생성
+- [x] 3단계 난이도 생성 (Easy/Medium/Hard)
+- [x] MIDI 직접 비교 모듈
+- [x] 복합 골든 테스트 (MXL + MIDI 원본/쉬운/다장조)
+- [x] 8곡 전체 유사도 리포트
+- [x] 기존 ByteDance(20.31%) 대비 개선 확인
