@@ -824,7 +824,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ---
 
-- [ ] 4. 비교 알고리즘 전면 교체 (mir_eval + DTW + 다중 메트릭)
+- [x] 4. 비교 알고리즘 전면 교체 (mir_eval + DTW + 다중 메트릭)
 
   **What to do**:
   - `backend/requirements.txt`에 `mir_eval`, `dtw-python` 추가
@@ -918,7 +918,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ---
 
-- [ ] 5. MusicXML 폴리포닉 양손 악보 지원
+- [x] 5. MusicXML 폴리포닉 양손 악보 지원
 
   **What to do**:
   - `backend/core/midi_to_musicxml.py` 수정:
