@@ -262,3 +262,30 @@
 - pretty_midi warns about "Tempo, Key or Time signature change events on non-zero tracks" — non-standard MIDI but parses fine
 - Without structural metadata, composite weights renormalize: melody_lenient 33.3%, pc 27.8%, chroma 22.2%, onset 16.7%
 
+## Task 8: Composite Golden Tests (2026-02-05)
+
+### Implementation
+- 3 of 4 test classes (TestMIDIComparison, TestEasyDifficulty, TestCMajorVariant) already existed from Task 7
+- Added TestCompositeMetrics with 3 reporting-only tests: all_songs, easy_difficulty, cmajor
+- midi marker already registered in conftest.py from Task 7
+- Total MIDI tests: 37 (16 MIDIComparison + 8 Easy + 10 CMajor + 3 CompositeMetrics)
+
+### Test Results
+- Self-comparison: 8/8 pass (all 100% composite)
+- MIDI comparison song_01: composite=53.20%, melody_f1=11.69%, chroma=98.60%
+- Easy difficulty song_01: composite=47.83%, chroma=98.54%, 649 notes vs 1177 ref
+- C-major report: 5/5 songs pass, composite range 21-34%, onset_f1 near 100%
+- Non-audio tests: 19/19 pass in 9.35s
+
+### C-Major Variant Metrics
+- song_03: composite=34.38%, chroma=60.37%, onset_f1=99.84%, contour=47.25%
+- song_04: composite=30.05%, chroma=37.65%, onset_f1=100%, contour=40.70%
+- song_05: composite=21.52%, chroma=19.37%, onset_f1=100%, contour=75.75%
+- song_06: composite=31.85%, chroma=35.46%, onset_f1=100%, contour=52.69%
+- song_08: composite=34.31%, chroma=48.96%, onset_f1=100%, contour=57.97%
+
+### Key Observations
+- C-major transpositions preserve rhythm perfectly (onset_f1 ~100%) but change pitch content
+- Audio generation tests are slow (~80s/song with model load) - full suite needs ~10min+
+- Composite metrics reporting tests are assertion-free for manual quality tracking
+- TestCompositeMetrics prints formatted tables for easy visual inspection of quality trends

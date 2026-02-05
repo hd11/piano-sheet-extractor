@@ -630,3 +630,252 @@ class TestCMajorVariant:
         assert result["onset_f1"] > 0.0 or result["chroma_similarity"] > 0.0, (
             f"C major variant has no similarity to original"
         )
+
+
+@pytest.mark.golden
+@pytest.mark.midi
+class TestCompositeMetrics:
+    """Golden Test - Composite Metrics Report for all songs (reporting only, no assertions)"""
+
+    ALL_SONGS = [
+        "song_01",
+        "song_02",
+        "song_03",
+        "song_04",
+        "song_05",
+        "song_06",
+        "song_07",
+        "song_08",
+    ]
+
+    CMAJOR_SONGS = {"song_03", "song_04", "song_05", "song_06", "song_08"}
+
+    def test_all_songs_composite_report(self, golden_data_dir, job_storage_path):
+        """
+        Generate and compare MIDI for all 8 songs, report composite metrics.
+
+        This is a reporting-only test: it collects all metrics and prints
+        a summary table. No assertions — used for manual quality tracking.
+        """
+        from core.midi_comparator import compare_midi
+        from core.audio_to_midi import convert_audio_to_midi
+
+        results = []
+
+        for song_id in self.ALL_SONGS:
+            song_path = golden_data_dir / song_id
+            input_mp3 = song_path / "input.mp3"
+            reference_mid = song_path / "reference.mid"
+
+            if not input_mp3.exists() or not reference_mid.exists():
+                results.append({"song_id": song_id, "status": "SKIPPED"})
+                continue
+
+            job_dir = job_storage_path / song_id
+            job_dir.mkdir(exist_ok=True)
+
+            try:
+                # Generate MIDI
+                generated_mid = job_dir / "arrangement.mid"
+                convert_audio_to_midi(input_mp3, generated_mid)
+
+                # Compare with reference
+                result = compare_midi(str(reference_mid), str(generated_mid))
+                result["song_id"] = song_id
+                result["status"] = "OK"
+                results.append(result)
+
+            except Exception as e:
+                results.append(
+                    {
+                        "song_id": song_id,
+                        "status": f"ERROR: {str(e)[:60]}",
+                    }
+                )
+
+        # Print summary table
+        print(f"\n{'=' * 90}")
+        print(f"COMPOSITE METRICS REPORT — All Songs")
+        print(f"{'=' * 90}")
+        print(
+            f"{'Song':<10} {'Status':<8} {'Composite':>10} {'Melody F1':>10} "
+            f"{'Lenient':>10} {'PC F1':>10} {'Chroma':>10} {'Onset':>10} "
+            f"{'Contour':>10} {'Ref#':>6} {'Gen#':>6}"
+        )
+        print(f"{'-' * 90}")
+
+        composites = []
+        for r in results:
+            if r.get("status") != "OK":
+                print(f"{r['song_id']:<10} {r['status']}")
+                continue
+
+            composites.append(r["composite_score"])
+            print(
+                f"{r['song_id']:<10} {'OK':<8} "
+                f"{r['composite_score']:>9.2%} "
+                f"{r['melody_f1']:>9.2%} "
+                f"{r['melody_f1_lenient']:>9.2%} "
+                f"{r['pitch_class_f1']:>9.2%} "
+                f"{r['chroma_similarity']:>9.2%} "
+                f"{r['onset_f1']:>9.2%} "
+                f"{r['pitch_contour_similarity']:>9.2%} "
+                f"{r['note_counts']['ref']:>6} "
+                f"{r['note_counts']['gen']:>6}"
+            )
+
+        if composites:
+            avg = sum(composites) / len(composites)
+            print(f"{'-' * 90}")
+            print(f"{'AVERAGE':<10} {'':8} {avg:>9.2%}")
+            print(f"{'MIN':<10} {'':8} {min(composites):>9.2%}")
+            print(f"{'MAX':<10} {'':8} {max(composites):>9.2%}")
+
+        print(f"{'=' * 90}")
+
+    def test_easy_difficulty_composite_report(self, golden_data_dir, job_storage_path):
+        """
+        Report composite metrics for Easy difficulty vs reference_easy.mid.
+
+        Reporting only — no assertions.
+        """
+        from core.midi_comparator import compare_midi
+        from core.audio_to_midi import convert_audio_to_midi
+        from core.midi_parser import parse_midi as parse_midi_func
+        from core.difficulty_adjuster import adjust_difficulty
+        import pretty_midi
+
+        results = []
+
+        for song_id in self.ALL_SONGS:
+            song_path = golden_data_dir / song_id
+            input_mp3 = song_path / "input.mp3"
+            reference_easy = song_path / "reference_easy.mid"
+
+            if not input_mp3.exists() or not reference_easy.exists():
+                results.append({"song_id": song_id, "status": "SKIPPED"})
+                continue
+
+            job_dir = job_storage_path / song_id
+            job_dir.mkdir(exist_ok=True)
+
+            try:
+                # Generate full arrangement
+                arrangement_mid = job_dir / "arrangement.mid"
+                convert_audio_to_midi(input_mp3, arrangement_mid)
+
+                # Adjust to easy
+                notes = parse_midi_func(arrangement_mid)
+                easy_notes = adjust_difficulty(notes, "easy", bpm=120.0)
+
+                # Save easy MIDI
+                pm = pretty_midi.PrettyMIDI()
+                instrument = pretty_midi.Instrument(program=0)
+                for note in easy_notes:
+                    midi_note = pretty_midi.Note(
+                        velocity=note.velocity,
+                        pitch=note.pitch,
+                        start=note.onset,
+                        end=note.onset + note.duration,
+                    )
+                    instrument.notes.append(midi_note)
+                pm.instruments.append(instrument)
+                easy_mid = job_dir / "easy_report.mid"
+                pm.write(str(easy_mid))
+
+                # Compare
+                result = compare_midi(str(reference_easy), str(easy_mid))
+                result["song_id"] = song_id
+                result["status"] = "OK"
+                result["easy_notes"] = len(easy_notes)
+                results.append(result)
+
+            except Exception as e:
+                results.append(
+                    {
+                        "song_id": song_id,
+                        "status": f"ERROR: {str(e)[:60]}",
+                    }
+                )
+
+        # Print summary
+        print(f"\n{'=' * 80}")
+        print(f"EASY DIFFICULTY METRICS REPORT")
+        print(f"{'=' * 80}")
+        print(
+            f"{'Song':<10} {'Status':<8} {'Composite':>10} {'Melody F1':>10} "
+            f"{'Chroma':>10} {'Ref#':>6} {'Gen#':>6}"
+        )
+        print(f"{'-' * 80}")
+
+        for r in results:
+            if r.get("status") != "OK":
+                print(f"{r['song_id']:<10} {r['status']}")
+                continue
+            print(
+                f"{r['song_id']:<10} {'OK':<8} "
+                f"{r['composite_score']:>9.2%} "
+                f"{r['melody_f1']:>9.2%} "
+                f"{r['chroma_similarity']:>9.2%} "
+                f"{r['note_counts']['ref']:>6} "
+                f"{r.get('easy_notes', 0):>6}"
+            )
+        print(f"{'=' * 80}")
+
+    def test_cmajor_composite_report(self, golden_data_dir):
+        """
+        Report composite metrics for C-major variants vs original reference.
+
+        Only songs with reference_cmajor.mid (03, 04, 05, 06, 08).
+        Reporting only — no assertions.
+        """
+        from core.midi_comparator import compare_midi
+
+        results = []
+
+        for song_id in sorted(self.CMAJOR_SONGS):
+            song_path = golden_data_dir / song_id
+            original_mid = song_path / "reference.mid"
+            cmajor_mid = song_path / "reference_cmajor.mid"
+
+            if not original_mid.exists() or not cmajor_mid.exists():
+                results.append({"song_id": song_id, "status": "SKIPPED"})
+                continue
+
+            try:
+                result = compare_midi(str(original_mid), str(cmajor_mid))
+                result["song_id"] = song_id
+                result["status"] = "OK"
+                results.append(result)
+            except Exception as e:
+                results.append(
+                    {
+                        "song_id": song_id,
+                        "status": f"ERROR: {str(e)[:60]}",
+                    }
+                )
+
+        # Print summary
+        print(f"\n{'=' * 80}")
+        print(f"C-MAJOR VARIANT METRICS REPORT")
+        print(f"{'=' * 80}")
+        print(
+            f"{'Song':<10} {'Status':<8} {'Composite':>10} {'Chroma':>10} "
+            f"{'Onset F1':>10} {'Contour':>10} {'Ref#':>6} {'Gen#':>6}"
+        )
+        print(f"{'-' * 80}")
+
+        for r in results:
+            if r.get("status") != "OK":
+                print(f"{r['song_id']:<10} {r['status']}")
+                continue
+            print(
+                f"{r['song_id']:<10} {'OK':<8} "
+                f"{r['composite_score']:>9.2%} "
+                f"{r['chroma_similarity']:>9.2%} "
+                f"{r['onset_f1']:>9.2%} "
+                f"{r['pitch_contour_similarity']:>9.2%} "
+                f"{r['note_counts']['ref']:>6} "
+                f"{r['note_counts']['gen']:>6}"
+            )
+        print(f"{'=' * 80}")
