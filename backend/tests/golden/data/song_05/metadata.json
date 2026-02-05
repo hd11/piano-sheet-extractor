@@ -5,5 +5,10 @@
   "duration_seconds": 220,
   "has_reference": true,
   "source": "manual_transcription",
-  "notes": "테스트 곡 5"
+  "notes": "테스트 곡 5",
+  "midi_variants": {
+    "original": "reference.mid",
+    "easy": "reference_easy.mid",
+    "cmajor": "reference_cmajor.mid"
+  }
 }
