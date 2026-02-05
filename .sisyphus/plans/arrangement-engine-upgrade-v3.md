@@ -1044,7 +1044,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ---
 
-- [ ] 7. MIDI 직접 비교 모듈 구현
+- [x] 7. MIDI 직접 비교 모듈 구현
 
   **What to do**:
   - `backend/core/midi_comparator.py` 신규 생성:
