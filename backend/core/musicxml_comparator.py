@@ -378,9 +378,9 @@ def _compare_metadata(
         각 항목의 일치 여부 딕셔너리
     """
     return {
-        "measures": ref_meta.measure_count == gen_meta.measure_count,
-        "time_signature": ref_meta.time_signature == gen_meta.time_signature,
-        "key": ref_meta.key == gen_meta.key,
+        "measure_count_match": ref_meta.measure_count == gen_meta.measure_count,
+        "time_sig_match": ref_meta.time_signature == gen_meta.time_signature,
+        "key_match": ref_meta.key == gen_meta.key,
     }
 
 

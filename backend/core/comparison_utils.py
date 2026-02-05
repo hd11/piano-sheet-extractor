@@ -389,22 +389,41 @@ def compute_composite_metrics(
     # Pitch contour similarity (DTW)
     contour_sim = compute_pitch_contour_similarity(ref_notes, gen_notes)
 
+    # Structural score: fraction of matching structural features (0.0-1.0)
+    structural_score = 0.0
+    has_structural = False
+    if structural_match is not None:
+        bools = [v for v in structural_match.values() if isinstance(v, bool)]
+        if bools:
+            structural_score = sum(bools) / len(bools)
+            has_structural = True
+
     # Composite score: weighted average
     # Weights reflect importance for arrangement quality assessment:
     # - melody_f1_lenient (30%): primary quality indicator with reasonable tolerance
-    # - pitch_class_f1 (20%): captures harmonic correctness ignoring octave
+    # - pitch_class_f1 (25%): captures harmonic correctness ignoring octave
     # - chroma_similarity (20%): overall harmonic profile match
     # - onset_f1 (15%): rhythmic accuracy
-    # - pitch_contour_similarity (15%): melodic shape
-    composite = (
-        0.30 * lenient_metrics["f1"]
-        + 0.20 * pc_metrics["f1"]
-        + 0.20 * chroma_sim
-        + 0.15 * onset_f1
-        + 0.15 * contour_sim
-    )
+    # - structural (10%): measure count, key, time signature match
+    # When structural data unavailable (e.g. MIDI), renormalize without it.
+    if has_structural:
+        composite = (
+            0.30 * lenient_metrics["f1"]
+            + 0.25 * pc_metrics["f1"]
+            + 0.20 * chroma_sim
+            + 0.15 * onset_f1
+            + 0.10 * structural_score
+        )
+    else:
+        # Without structural: renormalize remaining weights (sum=0.9 → 1.0)
+        composite = (
+            (0.30 / 0.90) * lenient_metrics["f1"]
+            + (0.25 / 0.90) * pc_metrics["f1"]
+            + (0.20 / 0.90) * chroma_sim
+            + (0.15 / 0.90) * onset_f1
+        )
 
-    result = {
+    result: Dict[str, Any] = {
         "melody_f1": strict_metrics["f1"],
         "melody_precision": strict_metrics["precision"],
         "melody_recall": strict_metrics["recall"],
@@ -413,6 +432,7 @@ def compute_composite_metrics(
         "chroma_similarity": chroma_sim,
         "onset_f1": onset_f1,
         "pitch_contour_similarity": contour_sim,
+        "structural_score": structural_score,
         "composite_score": composite,
         "note_counts": {
             "ref": len(ref_notes),

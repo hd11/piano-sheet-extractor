@@ -111,3 +111,53 @@
 - All 3 MIDI files generated with note_count > 0
 - Duration range: 192-198s (consistent ~3min songs)
 - Note count range: 1369-1873 (varies by musical complexity)
+
+## Task 4: Comparison Algorithm Overhaul (2026-02-05)
+
+### Implementation Status
+- mir_eval + dtw-python were ALREADY in requirements.txt from Task 3
+- comparison_utils.py with all metric functions ALREADY existed from Task 3
+- musicxml_comparator.py already had compare_musicxml_composite() from Task 3
+- This task focused on aligning structural key names and composite weights with spec
+
+### Changes Made
+1. **Structural key names**: `_compare_metadata()` updated:
+   - `measures` → `measure_count_match`
+   - `time_signature` → `time_sig_match`
+   - `key` → `key_match`
+2. **Composite weights adjusted**: Added structural (10%) to composite score
+   - melody_f1_lenient: 30%, pitch_class_f1: 25%, chroma: 20%, onset: 15%, structural: 10%
+   - Previous: melody 30%, pc 20%, chroma 20%, onset 15%, contour 15%
+3. **Structural renormalization**: When structural_match is None (MIDI comparisons),
+   weights renormalize to exclude structural 10% (divide by 0.9)
+
+### mir_eval Integration
+- CRITICAL: mir_eval uses Hz, not MIDI numbers — conversion via `mir_eval.util.midi_to_hz()`
+- Tolerance defaults: onset 50ms, pitch 50 cents
+- Manual Hz fallback: `440.0 * 2^((midi - 69) / 12)` for when mir_eval unavailable
+
+### Composite Metrics Structure
+- melody_f1: Standard mir_eval F1 (onset + pitch, 50ms/50cents)
+- melody_f1_lenient: Wider tolerance (200ms) for arrangement flexibility
+- pitch_class_f1: Octave-agnostic comparison
+- chroma_similarity: Harmonic profile cosine similarity
+- onset_f1: Rhythm-only comparison
+- pitch_contour_similarity: DTW-based melodic shape (kept as bonus metric)
+- structural_score: Fraction of matching structural features (0-1)
+- composite_score: Weighted average
+
+### Self-Comparison Results
+- song_01 reference vs itself: composite_score = 100.00%
+- All individual metrics = 1.0000 as expected
+- Legacy API (compare_musicxml): similarity = 100.00%
+
+### Backward Compatibility
+- Existing `compare_musicxml()` preserved with same signature
+- New `compare_musicxml_composite()` available
+- Graceful fallback if mir_eval unavailable (HAS_MIR_EVAL flag)
+- Graceful fallback if dtw-python unavailable (HAS_DTW flag)
+
+### Docker Note
+- Backend code is BAKED into Docker image (not volume-mounted)
+- Must `docker compose build backend` after code changes
+- Only test/, job-data, model-cache are volume-mounted
