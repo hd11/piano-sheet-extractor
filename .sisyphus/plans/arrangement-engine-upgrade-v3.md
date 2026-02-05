@@ -542,7 +542,7 @@ Wave 0 (Gate — 단일 태스크, 3개 내부 Phase):
 
 ---
 
-- [ ] 1. MIDI 레퍼런스 골든 테스트 데이터 통합
+- [x] 1. MIDI 레퍼런스 골든 테스트 데이터 통합
 
   **What to do**:
   - `test/` 폴더의 MIDI 파일들을 `backend/tests/golden/data/song_XX/`로 복사
