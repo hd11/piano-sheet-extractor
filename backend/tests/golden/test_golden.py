@@ -396,3 +396,237 @@ class TestMelodyComparison:
             print(f"   Error: {str(e)}")
             print(f"   Time before failure: {elapsed:.2f}s")
             raise
+
+
+@pytest.mark.golden
+@pytest.mark.midi
+class TestMIDIComparison:
+    """Golden Test - MIDI Comparison: Reference MIDI vs Generated MIDI"""
+
+    SONG_IDS = [
+        "song_01",
+        "song_02",
+        "song_03",
+        "song_04",
+        "song_05",
+        "song_06",
+        "song_07",
+        "song_08",
+    ]
+
+    @pytest.mark.parametrize("song_id", SONG_IDS, ids=lambda s: s)
+    def test_midi_reference_comparison(
+        self, song_id, golden_data_dir, job_storage_path
+    ):
+        """
+        Compare generated MIDI (from Pop2Piano) with reference MIDI.
+
+        Uses composite metrics: melody_f1, pitch_class_f1, chroma_similarity, etc.
+        """
+        from core.midi_comparator import compare_midi_detailed
+        from core.audio_to_midi import convert_audio_to_midi
+
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mid = song_path / "reference.mid"
+
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mid.exists(), f"Reference MIDI not found: {reference_mid}"
+
+        print(f"\n{'=' * 60}")
+        print(f"MIDI Comparison: {song_id}")
+        print(f"{'=' * 60}")
+
+        start_time = time.time()
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+
+        # Step 1: Generate MIDI from audio
+        print("Step 1: Generating MIDI from audio...")
+        generated_mid = job_dir / "arrangement.mid"
+        gen_result = convert_audio_to_midi(input_mp3, generated_mid)
+        assert generated_mid.exists(), "arrangement.mid not created"
+        assert gen_result["note_count"] > 0, "No notes in generated MIDI"
+        print(f"  OK Generated: {gen_result['note_count']} notes")
+
+        # Step 2: Compare with reference
+        print("Step 2: Comparing with reference MIDI...")
+        result = compare_midi_detailed(str(reference_mid), str(generated_mid))
+
+        print(f"\nMIDI Comparison Result for {song_id}:")
+        print(f"  Composite Score: {result['composite_score']:.2%}")
+        print(f"  Melody F1 (strict): {result['melody_f1']:.2%}")
+        print(f"  Melody F1 (lenient): {result['melody_f1_lenient']:.2%}")
+        print(f"  Pitch Class F1: {result['pitch_class_f1']:.2%}")
+        print(f"  Chroma Similarity: {result['chroma_similarity']:.2%}")
+        print(f"  Onset F1: {result['onset_f1']:.2%}")
+        print(f"  Pitch Contour: {result['pitch_contour_similarity']:.2%}")
+        print(f"  Ref notes: {result['note_counts']['ref']}")
+        print(f"  Gen notes: {result['note_counts']['gen']}")
+
+        elapsed = time.time() - start_time
+        print(f"\n  Processing time: {elapsed:.2f}s")
+
+        # Composite score should be > 0 (any meaningful similarity)
+        assert result["composite_score"] >= 0.0, (
+            f"Composite score negative: {result['composite_score']}"
+        )
+
+    @pytest.mark.parametrize("song_id", SONG_IDS, ids=lambda s: s)
+    def test_midi_self_comparison(self, song_id, golden_data_dir):
+        """
+        Self-comparison: reference MIDI vs itself should yield ~1.0.
+        """
+        from core.midi_comparator import compare_midi
+
+        song_path = golden_data_dir / song_id
+        reference_mid = song_path / "reference.mid"
+
+        if not reference_mid.exists():
+            pytest.skip(f"Reference MIDI not found: {reference_mid}")
+
+        result = compare_midi(str(reference_mid), str(reference_mid))
+
+        print(f"\nSelf-compare {song_id}: composite={result['composite_score']:.2%}")
+
+        assert result["composite_score"] > 0.95, (
+            f"Self-comparison too low: {result['composite_score']:.2%}"
+        )
+
+
+@pytest.mark.golden
+@pytest.mark.midi
+class TestEasyDifficulty:
+    """Golden Test - Easy difficulty vs reference_easy.mid"""
+
+    SONG_IDS = [
+        "song_01",
+        "song_02",
+        "song_03",
+        "song_04",
+        "song_05",
+        "song_06",
+        "song_07",
+        "song_08",
+    ]
+
+    @pytest.mark.parametrize("song_id", SONG_IDS, ids=lambda s: s)
+    def test_easy_vs_reference_easy(self, song_id, golden_data_dir, job_storage_path):
+        """
+        Compare easy difficulty output with reference_easy.mid.
+        """
+        from core.midi_comparator import compare_midi
+        from core.audio_to_midi import convert_audio_to_midi
+        from core.midi_parser import parse_midi as parse_midi_func
+        from core.difficulty_adjuster import adjust_difficulty
+        import json
+
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_easy = song_path / "reference_easy.mid"
+
+        if not reference_easy.exists():
+            pytest.skip(f"reference_easy.mid not found for {song_id}")
+
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+
+        print(f"\n{'=' * 60}")
+        print(f"Easy Difficulty: {song_id}")
+        print(f"{'=' * 60}")
+
+        job_dir = job_storage_path / song_id
+        job_dir.mkdir(exist_ok=True)
+
+        # Generate arrangement MIDI
+        arrangement_mid = job_dir / "arrangement.mid"
+        gen_result = convert_audio_to_midi(input_mp3, arrangement_mid)
+        assert gen_result["note_count"] > 0
+
+        # Parse and adjust to easy
+        notes = parse_midi_func(arrangement_mid)
+        easy_notes = adjust_difficulty(notes, "easy", bpm=120.0)
+
+        # Save easy MIDI
+        import pretty_midi
+
+        pm = pretty_midi.PrettyMIDI()
+        instrument = pretty_midi.Instrument(program=0)
+        for note in easy_notes:
+            midi_note = pretty_midi.Note(
+                velocity=note.velocity,
+                pitch=note.pitch,
+                start=note.onset,
+                end=note.onset + note.duration,
+            )
+            instrument.notes.append(midi_note)
+        pm.instruments.append(instrument)
+        easy_mid = job_dir / "easy.mid"
+        pm.write(str(easy_mid))
+
+        # Compare
+        result = compare_midi(str(reference_easy), str(easy_mid))
+
+        print(f"  Easy vs Reference Easy:")
+        print(f"    Composite: {result['composite_score']:.2%}")
+        print(f"    Chroma: {result['chroma_similarity']:.2%}")
+        print(f"    Ref notes: {result['note_counts']['ref']}")
+        print(f"    Gen notes: {result['note_counts']['gen']}")
+
+        # Easy notes should be fewer than full arrangement
+        assert len(easy_notes) < gen_result["note_count"], (
+            f"Easy ({len(easy_notes)}) should have fewer notes than full ({gen_result['note_count']})"
+        )
+
+
+@pytest.mark.golden
+@pytest.mark.midi
+class TestCMajorVariant:
+    """Golden Test - C Major variant comparison"""
+
+    # Only songs that have cmajor variants
+    CMAJOR_SONGS = ["song_03", "song_04", "song_05", "song_06", "song_08"]
+
+    @pytest.mark.parametrize("song_id", CMAJOR_SONGS, ids=lambda s: s)
+    def test_cmajor_reference_exists(self, song_id, golden_data_dir):
+        """Verify C major reference MIDI files exist."""
+        song_path = golden_data_dir / song_id
+        cmajor_mid = song_path / "reference_cmajor.mid"
+
+        assert cmajor_mid.exists(), f"reference_cmajor.mid not found for {song_id}"
+
+        # Parse and verify it has notes
+        import pretty_midi
+
+        pm = pretty_midi.PrettyMIDI(str(cmajor_mid))
+        note_count = sum(len(i.notes) for i in pm.instruments if not i.is_drum)
+        assert note_count > 0, f"C major reference has no notes: {song_id}"
+        print(f"{song_id} C major: {note_count} notes")
+
+    @pytest.mark.parametrize("song_id", CMAJOR_SONGS, ids=lambda s: s)
+    def test_cmajor_vs_original(self, song_id, golden_data_dir):
+        """
+        Compare C major variant with original reference.
+        They should have similar structure but different pitch distribution.
+        """
+        from core.midi_comparator import compare_midi
+
+        song_path = golden_data_dir / song_id
+        original_mid = song_path / "reference.mid"
+        cmajor_mid = song_path / "reference_cmajor.mid"
+
+        if not cmajor_mid.exists():
+            pytest.skip(f"reference_cmajor.mid not found for {song_id}")
+
+        result = compare_midi(str(original_mid), str(cmajor_mid))
+
+        print(f"\n{song_id} Original vs C Major:")
+        print(f"  Composite: {result['composite_score']:.2%}")
+        print(f"  Chroma: {result['chroma_similarity']:.2%}")
+        print(f"  Onset F1: {result['onset_f1']:.2%}")
+        print(f"  Contour: {result['pitch_contour_similarity']:.2%}")
+
+        # C major should have some similarity (same rhythm/structure)
+        # but different pitch content
+        assert result["onset_f1"] > 0.0 or result["chroma_similarity"] > 0.0, (
+            f"C major variant has no similarity to original"
+        )

@@ -18,6 +18,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "melody: Melody comparison test - validates melody extraction"
     )
+    config.addinivalue_line(
+        "markers", "midi: MIDI comparison test - validates against reference MIDI"
+    )
 
 
 @pytest.fixture(scope="session")

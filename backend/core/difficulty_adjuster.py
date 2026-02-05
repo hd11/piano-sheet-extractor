@@ -1,18 +1,19 @@
 """
 난이도 조절 시스템 (Difficulty Adjustment System)
 
-이 모듈은 멜로디 노트를 3단계 난이도 (easy, medium, hard)로 조절하고,
+이 모듈은 폴리포닉 피아노 편곡을 3단계 난이도 (easy, medium, hard)로 조절하고,
 코드 심볼을 추가한 후 MusicXML 파일로 저장합니다.
 
-난이도별 규칙:
-| Rule             | Easy           | Medium           | Hard      |
-|------------------|----------------|------------------|-----------|
-| Quantize grid    | 1 beat (초)    | 0.5 beat (초)    | 0.25 beat |
-| Min note dur     | 0.5초          | 0.25초           | 0.125초   |
-| Pitch range      | C4-C5 (60-72)  | C4-G5 (60-79)    | Original  |
-| Max simultaneous | 1 (monophonic) | 2                | Original  |
-| Fast passages    | Remove         | Simplify         | Keep      |
-| Ornaments        | Remove         | Remove           | Keep      |
+v2 (Pop2Piano polyphonic arrangement):
+| Rule             | Easy                | Medium              | Hard           |
+|------------------|---------------------|---------------------|----------------|
+| Content          | Melody only (RH)    | Melody + simple LH  | Full arrange   |
+| Quantize grid    | 1 beat (초)         | 0.5 beat (초)       | 0.25 beat      |
+| Min note dur     | 0.5초               | 0.25초              | 0.125초        |
+| Pitch range      | C4-C5 (60-72)       | C3-G5 (48-79)       | Original       |
+| Max simultaneous | 1 (monophonic)      | 3                   | Original       |
+| Score format     | Single staff        | Two-hand piano      | Two-hand piano |
+| Fast passages    | Remove              | Simplify            | Keep           |
 """
 
 from collections import defaultdict
@@ -23,8 +24,10 @@ from typing import Dict, List
 import music21
 
 from core.midi_parser import Note, parse_midi
+from core.melody_extractor import apply_skyline, filter_short_notes, resolve_overlaps
 from core.midi_to_musicxml import (
     notes_to_stream,
+    notes_to_piano_musicxml,
     seconds_to_quarter_length,
     stream_to_musicxml,
 )
@@ -44,12 +47,9 @@ def adjust_difficulty(notes: List[Note], level: str, bpm: float) -> List[Note]:
         List[Note]: 난이도 조절된 Note 리스트
 
     Note:
-        - hard 레벨은 원본 노트를 그대로 반환 (단, deepcopy 적용)
-        - easy/medium은 다음 순서로 처리:
-          1. 짧은 음 제거 (min_duration 미만)
-          2. 퀀타이즈 (onset을 grid에 스냅)
-          3. 옥타브 조정 (범위 밖 음표 이동)
-          4. 동시 발음 제한 (max_simultaneous 초과 시 높은 음만 유지)
+        - hard: 원본 폴리포닉 편곡 그대로 (deepcopy)
+        - medium: 멜로디 + 간소화된 LH (동시 발음 3개 제한)
+        - easy: 멜로디만 (skyline → 모노포닉)
     """
     # Always create a deep copy to avoid mutating original notes
     adjusted = deepcopy(notes)
@@ -57,36 +57,60 @@ def adjust_difficulty(notes: List[Note], level: str, bpm: float) -> List[Note]:
     beat_sec = 60.0 / bpm  # 1 beat in seconds
 
     if level == "easy":
+        # Easy: melody only via skyline algorithm
+        melody = apply_skyline(adjusted)
+        melody = filter_short_notes(melody)
+        melody = resolve_overlaps(melody)
+
+        # Additional simplification
         quantize_grid = beat_sec  # quarter note
         min_duration = 0.5  # seconds
         octave_range = (60, 72)  # C4-C5
-        max_simultaneous = 1
+
+        # Remove short notes
+        filtered = [n for n in melody if n.duration >= min_duration]
+
+        # Quantize
+        for note in filtered:
+            note.onset = round(note.onset / quantize_grid) * quantize_grid
+
+        # Octave adjustment
+        for note in filtered:
+            while note.pitch < octave_range[0]:
+                note.pitch += 12
+            while note.pitch > octave_range[1]:
+                note.pitch -= 12
+
+        # Monophonic (1 note at a time)
+        filtered = limit_simultaneous_notes(filtered, 1)
+        return filtered
+
     elif level == "medium":
         quantize_grid = beat_sec / 2  # 8th note
         min_duration = 0.25  # seconds
-        octave_range = (60, 79)  # C4-G5
-        max_simultaneous = 2
+        octave_range = (48, 79)  # C3-G5
+        max_simultaneous = 3
+
+        # Remove short notes
+        filtered = [n for n in adjusted if n.duration >= min_duration]
+
+        # Quantize
+        for note in filtered:
+            note.onset = round(note.onset / quantize_grid) * quantize_grid
+
+        # Octave adjustment
+        for note in filtered:
+            while note.pitch < octave_range[0]:
+                note.pitch += 12
+            while note.pitch > octave_range[1]:
+                note.pitch -= 12
+
+        # Limit simultaneous notes
+        filtered = limit_simultaneous_notes(filtered, max_simultaneous)
+        return filtered
+
     else:  # hard
         return adjusted  # keep original (already deep copied)
-
-    # 1. Remove short notes (fast passages / ornaments)
-    filtered = [n for n in adjusted if n.duration >= min_duration]
-
-    # 2. Quantize (snap onset to grid)
-    for note in filtered:
-        note.onset = round(note.onset / quantize_grid) * quantize_grid
-
-    # 3. Adjust pitch range (octave shift)
-    for note in filtered:
-        while note.pitch < octave_range[0]:
-            note.pitch += 12
-        while note.pitch > octave_range[1]:
-            note.pitch -= 12
-
-    # 4. Limit simultaneous notes
-    filtered = limit_simultaneous_notes(filtered, max_simultaneous)
-
-    return filtered
 
 
 def limit_simultaneous_notes(notes: List[Note], max_count: int) -> List[Note]:
@@ -227,9 +251,10 @@ def generate_all_sheets(
             {"easy": Path, "medium": Path, "hard": Path}
 
     Note:
-        - 입력: melody.mid (Task 4 출력) + analysis.json (Task 6 출력)
+        - 입력: melody.mid (편곡 모델 출력) + analysis.json (분석 결과)
         - 처리: MIDI → Note 리스트 → 난이도별 Note 리스트 → MusicXML
         - 출력: sheet_easy.musicxml, sheet_medium.musicxml, sheet_hard.musicxml
+        - Easy: single staff (melody only), Medium/Hard: two-hand piano score
         - 각 난이도에 코드 심볼 추가
     """
     # 1. MIDI → Note list
@@ -246,14 +271,20 @@ def generate_all_sheets(
         # Adjust difficulty
         adjusted_notes = adjust_difficulty(notes, difficulty, bpm)
 
-        # Create music21 Stream (Task 5 function)
-        stream = notes_to_stream(adjusted_notes, bpm, key)
+        # Easy: single staff (monophonic melody)
+        # Medium/Hard: two-hand piano score (polyphonic)
+        use_polyphonic = difficulty in ("medium", "hard")
 
-        # Add chord symbols to Stream
-        add_chord_symbols(stream, chords, bpm)
-
-        # Stream → MusicXML string (Task 5 function)
-        musicxml_str = stream_to_musicxml(stream)
+        if use_polyphonic:
+            # Two-hand piano score
+            musicxml_str = notes_to_piano_musicxml(
+                adjusted_notes, bpm, key, polyphonic=True
+            )
+        else:
+            # Legacy single-staff mode with chord symbols
+            stream = notes_to_stream(adjusted_notes, bpm, key)
+            add_chord_symbols(stream, chords, bpm)
+            musicxml_str = stream_to_musicxml(stream)
 
         # Save to file (atomic write)
         output_path = job_dir / f"sheet_{difficulty}.musicxml"

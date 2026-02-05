@@ -267,3 +267,138 @@ def notes_to_musicxml(
     """
     stream = notes_to_stream(notes, bpm, key, time_signature)
     return stream_to_musicxml(stream)
+
+
+# ============================================================================
+# Polyphonic Two-Hand Piano Support
+# ============================================================================
+
+
+def split_hands(notes: List[Note], split_point: int = 60) -> tuple:
+    """
+    Split notes into right hand (treble) and left hand (bass).
+
+    Args:
+        notes: List[Note] - All notes
+        split_point: MIDI pitch split point (default 60 = C4)
+            Notes >= split_point go to right hand (treble clef)
+            Notes < split_point go to left hand (bass clef)
+
+    Returns:
+        (rh_notes, lh_notes) tuple of List[Note]
+    """
+    rh_notes = [n for n in notes if n.pitch >= split_point]
+    lh_notes = [n for n in notes if n.pitch < split_point]
+    return rh_notes, lh_notes
+
+
+def notes_to_piano_score(
+    notes: List[Note],
+    bpm: float,
+    key: str,
+    time_signature: str = "4/4",
+    split_point: int = 60,
+) -> music21.stream.Score:
+    """
+    Convert Note list to a two-staff piano Score (treble + bass clef).
+
+    This creates a proper piano score with:
+    - Part 1 (Right Hand): Treble clef, notes >= split_point
+    - Part 2 (Left Hand): Bass clef, notes < split_point
+
+    Args:
+        notes: List[Note] - 초 단위 시간의 Note 리스트
+        bpm: float - 템포
+        key: str - 조성 (예: "C major")
+        time_signature: str - 박자표 (기본값: "4/4")
+        split_point: int - RH/LH split MIDI pitch (default 60 = C4)
+
+    Returns:
+        music21.stream.Score with two Parts (RH treble, LH bass)
+    """
+    rh_notes, lh_notes = split_hands(notes, split_point)
+
+    # Create Score
+    score = music21.stream.Score()
+
+    # Parse key
+    key_parts = key.split()
+    if len(key_parts) == 2:
+        tonic, mode = key_parts
+        key_obj = music21.key.Key(tonic, mode)
+    else:
+        key_obj = music21.key.Key(key)
+
+    ts_obj = music21.meter.TimeSignature(time_signature)
+    tempo_obj = music21.tempo.MetronomeMark(number=bpm)
+
+    quantize_grid = 0.25  # 16th note
+
+    # Helper to build a Part from notes
+    def _build_part(part_notes: List[Note], clef_obj) -> music21.stream.Part:
+        part = music21.stream.Part()
+        part.insert(0, clef_obj)
+        part.insert(0, key_obj.__deepcopy__())
+        part.insert(0, ts_obj.__deepcopy__())
+        part.insert(0, tempo_obj.__deepcopy__())
+
+        for n in part_notes:
+            m21_note = music21.note.Note(n.pitch)
+
+            offset_ql = seconds_to_quarter_length(n.onset, bpm)
+            offset_ql = max(0.0, round(offset_ql / quantize_grid) * quantize_grid)
+
+            duration_ql = seconds_to_quarter_length(n.duration, bpm)
+            duration_ql = max(
+                quantize_grid, round(duration_ql / quantize_grid) * quantize_grid
+            )
+
+            m21_note.duration.quarterLength = duration_ql
+            m21_note.volume.velocity = n.velocity
+            part.insert(offset_ql, m21_note)
+
+        return part
+
+    # Right Hand (treble clef)
+    rh_part = _build_part(rh_notes, music21.clef.TrebleClef())
+    rh_part.partName = "Piano"
+    rh_part.partAbbreviation = "Pno."
+
+    # Left Hand (bass clef)
+    lh_part = _build_part(lh_notes, music21.clef.BassClef())
+
+    score.insert(0, rh_part)
+    score.insert(0, lh_part)
+
+    return score
+
+
+def notes_to_piano_musicxml(
+    notes: List[Note],
+    bpm: float,
+    key: str,
+    time_signature: str = "4/4",
+    split_point: int = 60,
+    polyphonic: bool = True,
+) -> str:
+    """
+    Convert Note list to MusicXML string, optionally as two-hand piano score.
+
+    Args:
+        notes: List[Note] - 초 단위 시간의 Note 리스트
+        bpm: float - 템포
+        key: str - 조성
+        time_signature: str - 박자표 (기본값: "4/4")
+        split_point: int - RH/LH split MIDI pitch (default 60 = C4)
+        polyphonic: bool - If True, create two-staff piano score.
+                          If False, use legacy single-staff mode.
+
+    Returns:
+        str - MusicXML 형식의 문자열
+    """
+    if not polyphonic:
+        # Legacy single-staff mode
+        return notes_to_musicxml(notes, bpm, key, time_signature)
+
+    score = notes_to_piano_score(notes, bpm, key, time_signature, split_point)
+    return stream_to_musicxml(score)

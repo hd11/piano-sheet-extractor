@@ -4,14 +4,25 @@ MusicXML 비교 모듈
 두 MusicXML/MXL 파일을 비교하여 유사도를 계산합니다.
 음표 기반 비교 (pitch, onset, duration)와 구조적 비교 (마디 수, 박자표, 조성)를 수행합니다.
 
+v2: mir_eval + DTW + 복합 메트릭 추가 (compare_musicxml_composite)
+기존 compare_musicxml() API는 하위 호환성을 위해 유지됩니다.
+
 Golden Test에서 reference.mxl과 generated output을 비교하는 데 사용됩니다.
 """
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import music21
+
+from core.comparison_utils import (
+    NoteEvent,
+    compute_composite_metrics,
+)
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -558,3 +569,105 @@ def compare_musicxml(ref_path: str, gen_path: str) -> Dict[str, Any]:
             "structural_match": structural_match,
         },
     }
+
+
+def _noteinfos_to_noteevents(
+    notes: List[NoteInfo], bpm: float = 120.0
+) -> List[NoteEvent]:
+    """
+    Convert NoteInfo (quarterLength-based) to NoteEvent (seconds-based).
+
+    Args:
+        notes: NoteInfo list (onset/duration in quarterLength)
+        bpm: Tempo for conversion (default 120 BPM)
+
+    Returns:
+        List of NoteEvent with onset/offset in seconds
+    """
+    beats_per_second = bpm / 60.0
+    events = []
+    for n in notes:
+        onset_sec = n.onset / beats_per_second
+        duration_sec = n.duration / beats_per_second
+        events.append(
+            NoteEvent(
+                pitch=n.pitch,
+                onset=onset_sec,
+                offset=onset_sec + duration_sec,
+            )
+        )
+    return events
+
+
+def compare_musicxml_composite(
+    ref_path: str,
+    gen_path: str,
+    bpm: float = 120.0,
+) -> Dict[str, Any]:
+    """
+    Compare two MusicXML/MXL files using composite metrics (mir_eval + DTW + chroma).
+
+    This is the v2 comparison function that provides multi-dimensional evaluation.
+    For backward compatibility, use compare_musicxml() which returns the legacy format.
+
+    Args:
+        ref_path: Reference MusicXML/MXL file path
+        gen_path: Generated MusicXML/MXL file path
+        bpm: Tempo for quarterLength→seconds conversion (default 120 BPM)
+
+    Returns:
+        Dict with composite metrics:
+        {
+            "melody_f1": float,
+            "melody_f1_lenient": float,
+            "melody_precision": float,
+            "melody_recall": float,
+            "pitch_class_f1": float,
+            "chroma_similarity": float,
+            "onset_f1": float,
+            "pitch_contour_similarity": float,
+            "structural_similarity": {...},
+            "composite_score": float,
+            "note_counts": {"ref": int, "gen": int},
+            # Legacy fields for compatibility
+            "similarity": float,  # same as composite_score
+            "passed": bool,
+        }
+
+    Raises:
+        ComparisonError: If files not found or parsing fails
+    """
+    # Parse files
+    ref_score = _parse_musicxml(ref_path)
+    gen_score = _parse_musicxml(gen_path)
+
+    # Extract notes (quarterLength-based)
+    ref_notes_ql = _extract_notes(ref_score)
+    gen_notes_ql = _extract_notes(gen_score)
+
+    if not ref_notes_ql:
+        raise ComparisonError(f"Reference file has no notes: {ref_path}")
+
+    # Try to extract BPM from score
+    detected_bpm = bpm
+    tempos = ref_score.flatten().getElementsByClass(music21.tempo.MetronomeMark)
+    if tempos:
+        detected_bpm = tempos[0].number
+
+    # Convert to seconds-based NoteEvents
+    ref_events = _noteinfos_to_noteevents(ref_notes_ql, detected_bpm)
+    gen_events = _noteinfos_to_noteevents(gen_notes_ql, detected_bpm)
+
+    # Extract metadata for structural comparison
+    ref_meta = _extract_metadata(ref_score)
+    gen_meta = _extract_metadata(gen_score)
+    structural_match = _compare_metadata(ref_meta, gen_meta)
+
+    # Compute composite metrics
+    result = compute_composite_metrics(ref_events, gen_events, structural_match)
+
+    # Add legacy compatibility fields
+    result["similarity"] = result["composite_score"]
+    result["passed"] = result["composite_score"] >= SIMILARITY_THRESHOLD
+
+    return result
