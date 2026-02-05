@@ -211,8 +211,13 @@ def compute_onset_only_f1(
     gen_onsets = np.array(sorted(n.onset for n in gen_notes))
 
     try:
-        f1 = mir_eval.onset.f_measure(ref_onsets, gen_onsets, window=onset_tolerance)
-        return float(f1)
+        result = mir_eval.onset.f_measure(
+            ref_onsets, gen_onsets, window=onset_tolerance
+        )
+        # mir_eval.onset.f_measure returns (f_measure, precision, recall) tuple
+        if isinstance(result, tuple):
+            return float(result[0])
+        return float(result)
     except Exception as e:
         logger.warning(f"Onset F1 computation failed: {e}")
         return 0.0
