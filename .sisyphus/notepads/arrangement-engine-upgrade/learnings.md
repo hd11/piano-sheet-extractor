@@ -70,3 +70,44 @@
 - Metadata structure supports variant tracking
 - No breaking changes to existing test infrastructure
 
+## Task 2-B: Pop2Piano 3-Song Benchmark (2026-02-05)
+
+### Benchmark Results
+
+| Song | Note Count | Duration (s) | Processing Time (s) | Notes/sec |
+|------|-----------|--------------|---------------------|-----------|
+| 01   | 1369      | 194.6        | 78.7                | 17.4      |
+| 04   | 1873      | 197.9        | 36.0                | 52.0      |
+| 08   | 1806      | 192.1        | 30.8                | 58.6      |
+
+**Average**: 1683 notes, 194.9s duration, 48.5s processing (excl. model load)
+
+### Model Load Overhead
+- Song 01 includes ~42s model load time (first call triggers singleton init)
+- Subsequent calls (song_04, song_08) reflect pure inference time: ~30-36s
+- Singleton pattern effectively amortizes model load cost
+
+### OOM Fallback Status
+- **Triggered**: NO
+- Running on CPU (no CUDA GPU available in Docker)
+- OOM fallback code confirmed at lines 148-159 in `audio_to_midi.py`
+- Logic: catches `RuntimeError` with "out of memory", moves model+inputs to CPU, retries
+- Code is correct but untestable without GPU — will only trigger on CUDA OOM
+
+### Function Signature Verified
+- `convert_audio_to_midi(audio_path: Path, output_path: Path) -> Dict[str, Any]`
+- Returns: `midi_path`, `note_count`, `duration_seconds`, `processing_time`
+- No changes from Task 0
+
+### Optimization Opportunities
+1. **GPU acceleration**: CPU inference is ~30-36s per song; GPU would likely be 3-5x faster
+2. **Batch processing**: Pop2Piano processes songs sequentially; could parallelize with multiple model instances (at memory cost)
+3. **Model quantization**: INT8 quantization could reduce memory footprint ~50% with minimal quality loss
+4. **Audio chunking**: For very long audio (>5min), could chunk and process segments to reduce peak memory
+5. **Caching**: Generated MIDI could be cached by audio hash to avoid re-processing identical inputs
+6. **HF token**: "unauthenticated requests" warning suggests setting HF_TOKEN for faster model downloads
+
+### All Songs Valid
+- All 3 MIDI files generated with note_count > 0
+- Duration range: 192-198s (consistent ~3min songs)
+- Note count range: 1369-1873 (varies by musical complexity)
