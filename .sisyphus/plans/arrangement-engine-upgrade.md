@@ -254,7 +254,7 @@ Wave 0 (Gate):
 
 ## TODOs
 
-- [ ] 0. Music2MIDI 스파이크 검증 (GO/NO-GO Gate)
+- [x] 0. Music2MIDI 스파이크 검증 (GO/NO-GO Gate) — **NO-GO** (2026-02-05)
 
   **What to do**:
   - Music2MIDI 체크포인트 다운로드 (GitHub Release tag `0.1.0`)

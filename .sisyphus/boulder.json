@@ -1,8 +1,6 @@
 {
-  "active_plan": "C:\\Users\\Jemma\\projects\\piano-sheet-extractor\\.sisyphus\\plans\\transcription-model-upgrade.md",
-  "started_at": "2026-02-04T10:24:44.913Z",
-  "session_ids": [
-    "ses_3d7d33de6ffeylF68b3VAc0534"
-  ],
-  "plan_name": "transcription-model-upgrade"
+  "active_plan": "C:\\Users\\handuk.lee\\projects\\mk-pinano-sheet\\.sisyphus\\plans\\arrangement-engine-upgrade.md",
+  "started_at": "2026-02-05T02:26:21.846Z",
+  "session_ids": ["ses_3d50c3d10ffeb6DQLZVvGgR3wD"],
+  "plan_name": "arrangement-engine-upgrade"
 }
