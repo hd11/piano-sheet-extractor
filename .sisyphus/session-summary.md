@@ -1,8 +1,15 @@
-# Pop2Piano 업그레이드 - 세션 요약
+# 피아노 편곡 엔진 업그레이드 - 세션 요약
 
-**날짜**: 2026-02-05
-**플랜**: `.sisyphus/plans/pop2piano-upgrade.md`
-**목표**: ByteDance(피아노 인식) → Pop2Piano(피아노 편곡 생성) 전면 교체
+**날짜**: 2026-02-05 (v2 업데이트)
+**플랜**: `.sisyphus/plans/pop2piano-upgrade.md` (v2 — Music2MIDI 스파이크 + 조건부 분기)
+**목표**: ByteDance(피아노 인식) → Music2MIDI or Pop2Piano(피아노 편곡 생성) 전면 교체
+
+### ⚠️ v2 핵심 변경사항 (2026-02-05)
+- **전수 조사**: 전 세계 "피아노 편곡 생성" 모델 5개 발견 (Etude, Music2MIDI, PiCoGen2, Pop2Piano, audio2midi)
+- **Music2MIDI** (MMM'25)가 Pop2Piano 능가 + **난이도 컨디셔닝 내장** (킬러 피처)
+- **PiCoGen2**: VRAM >16GB 필요 → 탈락, **Etude**: 코드 미공개 → 탈락
+- **플랜 v2**: Wave 0에 Music2MIDI 스파이크 추가, GO/NO-GO 조건부 분기
+- **Oracle 분석 결론**: Music2MIDI 주력 + Pop2Piano 폴백
 
 ---
 
