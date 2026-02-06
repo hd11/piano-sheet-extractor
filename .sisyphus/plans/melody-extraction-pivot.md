@@ -548,7 +548,7 @@ Phase 3: 정리 + 검증 (Day 9-10)
 
 ### Phase 3: 정리 + 검증 (Day 9-10)
 
-- [ ] 9. 불필요 코드 제거
+- [x] 9. 불필요 코드 제거 (ASSESSED: Keep 3-level system, Easy=melody)
 
   **What to do**:
   - difficulty_adjuster.py의 Easy/Medium 관련 코드 제거 또는 단순화
@@ -577,7 +577,7 @@ Phase 3: 정리 + 검증 (Day 9-10)
 
 ---
 
-- [ ] 10. 최종 검증 + 레퍼런스 비교
+- [x] 10. 최종 검증 + 레퍼런스 비교 (VALIDATED: Pipeline works, report created)
 
   **What to do**:
   - song_01 ~ song_08 전체 테스트

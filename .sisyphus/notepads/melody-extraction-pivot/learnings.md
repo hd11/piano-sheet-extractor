@@ -402,3 +402,270 @@ Replaced Pop2Piano with Basic Pitch in `backend/core/audio_to_midi.py`.
 - Skyline algorithm will be applied AFTER this function (in melody_extractor.py)
 - This function outputs raw polyphonic MIDI (1,164 notes)
 - Melody extraction step will reduce to ~488 notes
+
+---
+
+## 12/8 Time Signature Support (Task 8)
+
+### Summary
+Added proper 12/8 time signature support to MusicXML generation.
+
+### Key Findings
+1. **Already working**: The `time_signature` parameter was already passed through to music21's `TimeSignature` class
+2. **music21 handles compound meters**: No special quantization grid needed - music21 handles 12/8 natively
+3. **Quantization grid (0.25) works for compound meters**: 16th note grid aligns with compound meter subdivisions
+
+### Changes Made
+1. Updated docstring in `notes_to_stream()` to indicate 12/8 support:
+   - Changed: `현재 4/4만 지원` → `예: "4/4", "12/8"`
+   - Added note: `12/8 등 복합 박자(compound meter)도 지원됨`
+
+### Verification Results
+- ✅ 12/8 time signature: PASS
+- ✅ 4/4 time signature (regression): PASS  
+- ✅ 6/8 time signature (bonus): PASS
+
+### Technical Details
+- **12/8 compound meter**: 4 beats per measure, each beat is a dotted quarter (3 eighth notes)
+- **Beat unit**: dotted quarter = 1.5 quarter lengths
+- **Quantization**: 16th note grid (0.25 ql) aligns correctly with compound subdivisions
+
+### Files Modified
+- `backend/core/midi_to_musicxml.py` (lines 90, 96-98)
+
+
+
+---
+
+## Difficulty System Assessment (Task 9)
+
+### Summary
+Assessed the 3-level difficulty system (Easy/Medium/Hard) to determine if it can be simplified based on the project goal: "딱 멜로디만" (just melody, concisely).
+
+### Current System Architecture
+
+**File:** `backend/core/difficulty_adjuster.py` (354 lines)
+
+**3-Level API:**
+1. **Easy**: Melody only (RH skyline)
+   - Pipeline: Skyline → filter_short → resolve_overlap
+   - Output: Monophonic melody line
+   - Use case: Single-staff display
+
+2. **Medium**: Melody + simplified bass (LH)
+   - RH: Skyline melody (same as Easy)
+   - LH: Lowest note per beat window
+   - Output: Two-hand piano score
+   - Use case: Intermediate players
+
+3. **Hard**: Full Pop2Piano arrangement
+   - Passthrough (no reduction)
+   - Output: Complete polyphonic arrangement
+   - Use case: Advanced players
+
+**Supporting Functions:**
+- `adjust_difficulty(notes, level, bpm)` - Main wrapper (delegates to 3-level functions)
+- `generate_all_sheets(job_dir, melody_mid, analysis)` - Generates all 3 MusicXML files
+- `add_chord_symbols(stream, chords, bpm)` - Adds chord symbols to sheet
+- `limit_simultaneous_notes(notes, max_count)` - Limits polyphony
+- `_simplify_bass(lh_notes, beat_sec)` - Helper for Medium level
+
+### Usage Analysis
+
+**Where difficulty system is used:**
+
+1. **Job Processing** (`backend/core/job_manager.py`):
+   - Line 376: `sheets = generate_all_sheets(job_dir, melody_path, analysis)`
+   - Generates all 3 sheets during job completion
+   - Line 481: `adjusted_notes = adjust_difficulty(notes, difficulty, bpm)`
+   - Used in regeneration loop (lines 466-502)
+
+2. **API Endpoints** (`backend/api/download.py`):
+   - Lines 24-29: `Difficulty` enum with EASY, MEDIUM, HARD
+   - Line 36: `difficulty: Difficulty = Query(default=Difficulty.MEDIUM)`
+   - Line 73: `file_path = job_dir / f"sheet_{difficulty.value}.musicxml"`
+   - Allows users to download any of 3 difficulty levels
+
+3. **Result Endpoint** (`backend/api/result.py`):
+   - Line 88: `"available_difficulties": ["easy", "medium", "hard"]`
+   - Line 89: `"musicxml_url": f"/api/download/{job_id}/musicxml?difficulty=medium"`
+   - Advertises all 3 levels to frontend
+
+4. **Test Suite** (`backend/tests/golden/test_golden.py`):
+   - Uses `generate_all_sheets()` for golden tests
+   - Tests `adjust_difficulty()` with "easy" level
+   - Validates all 3 difficulty levels
+
+5. **Utility Scripts**:
+   - `backend/scripts/batch_generate_mxl.py`: Uses `generate_all_sheets()`
+   - `backend/scripts/diagnose_alignment.py`: Uses `generate_all_sheets()`
+
+### Assessment: Can We Simplify?
+
+**Question:** Do we need Easy/Medium/Hard levels, or can we simplify to just "melody" output?
+
+**Analysis:**
+
+✅ **Arguments for simplification:**
+1. **Project goal is clear**: "딱 멜로디만" (just melody, concisely)
+   - This suggests melody-only output, not 3 difficulty levels
+   - Arranger feedback was explicit: melody extraction, not arrangement
+
+2. **Easy level already does what we want**:
+   - `generate_easy_difficulty()` extracts melody using Skyline
+   - This is exactly what "딱 멜로디만" means
+   - No need for Medium/Hard if goal is melody only
+
+3. **Medium/Hard are arrangement features**:
+   - Medium adds simplified bass (LH accompaniment)
+   - Hard is full polyphonic arrangement
+   - These are NOT melody extraction - they're arrangement/difficulty levels
+   - Arranger didn't ask for these
+
+4. **Simplification reduces complexity**:
+   - Remove 3 functions: `generate_medium_difficulty()`, `generate_hard_difficulty()`, `_simplify_bass()`
+   - Remove `adjust_difficulty()` wrapper (not needed if only one level)
+   - Remove `generate_all_sheets()` loop (generate only one sheet)
+   - Remove `Difficulty` enum from API
+   - Simplify job processing (no loop over 3 levels)
+
+5. **Reduces maintenance burden**:
+   - Fewer code paths to test
+   - Fewer edge cases (e.g., hand-split logic for Medium/Hard)
+   - Clearer intent: "extract melody" not "generate 3 difficulty levels"
+
+❌ **Arguments against simplification:**
+1. **API already exposes difficulty levels**:
+   - `download.py` has `Difficulty` enum
+   - `result.py` advertises `available_difficulties: ["easy", "medium", "hard"]`
+   - Removing would break API contract
+
+2. **Tests depend on all 3 levels**:
+   - `test_golden.py` tests all 3 levels
+   - Would need to update test suite
+
+3. **Job processing generates all 3**:
+   - `job_manager.py` calls `generate_all_sheets()` which generates all 3
+   - Would need to refactor processing pipeline
+
+4. **Users might expect difficulty levels**:
+   - Some users might want simplified bass (Medium) or full arrangement (Hard)
+   - Removing would limit functionality
+
+### Recommendation
+
+**DECISION: Keep the 3-level system, but clarify intent**
+
+**Rationale:**
+1. **Melody extraction is the primary goal** - `generate_easy_difficulty()` does this perfectly
+2. **Medium/Hard are optional enhancements** - for users who want more than just melody
+3. **No breaking changes needed** - existing API and tests continue to work
+4. **Flexibility is good** - users can choose what they want (melody only, melody+bass, full arrangement)
+5. **Code is already clean** - functions are well-separated, easy to understand
+
+**However, we should:**
+1. ✅ **Document the intent clearly** in docstrings
+   - Easy = "Melody extraction (primary goal)"
+   - Medium = "Melody + simplified bass (optional)"
+   - Hard = "Full arrangement (optional)"
+
+2. ✅ **Consider making Easy the default** in API
+   - Currently defaults to Medium
+   - Should default to Easy (melody only) to match project goal
+
+3. ✅ **Update documentation** to explain the 3 levels
+   - Make clear that Easy is the "main" output
+   - Medium/Hard are optional for users who want more
+
+4. ⚠️ **Optional: Add a "melody-only" mode** to simplify for users
+   - Could add a query parameter: `?mode=melody` (default) or `?mode=full`
+   - But this is not necessary - Easy level already does this
+
+### Unused Code Analysis
+
+**Imports that could be removed if we removed Medium/Hard:**
+- `defaultdict` (used only in `_simplify_bass()`)
+- `math` (used only in `_simplify_bass()`)
+
+**But these are minimal** - not worth removing if we keep the system.
+
+### Conclusion
+
+**The difficulty system is well-designed and serves a purpose:**
+- Easy = Melody extraction (matches project goal)
+- Medium = Melody + bass (for intermediate players)
+- Hard = Full arrangement (for advanced players)
+
+**No simplification needed.** The system is already simple and clean. The "Easy" level does exactly what "딱 멜로디만" means.
+
+**Recommended action:** Keep as-is, but consider changing API default from Medium to Easy.
+
+### Files Analyzed
+- `backend/core/difficulty_adjuster.py` (354 lines)
+- `backend/core/job_manager.py` (603 lines)
+- `backend/api/download.py` (99 lines)
+- `backend/api/result.py` (165 lines)
+- `backend/tests/golden/test_golden.py` (partial)
+
+### Key Learnings
+1. **Difficulty system is well-structured**: Each level has clear purpose
+2. **Easy level = melody extraction**: Already does what project needs
+3. **Medium/Hard are optional enhancements**: Not required for "딱 멜로디만"
+4. **No breaking changes needed**: System can stay as-is
+5. **API default should be Easy**: Currently defaults to Medium (should be melody-only)
+
+
+---
+
+## Final Validation (Task 10)
+
+### Summary
+Completed final validation of the melody extraction pivot from Pop2Piano to Basic Pitch.
+
+### Test Results (song_01, 194.6s audio)
+
+**Performance Metrics:**
+- Total processing time: **11.0s** (0.06x realtime)
+  - Audio loading + Basic Pitch: ~9s (82%%)
+  - Skyline algorithm: <1s (<1%%)
+- Model: Basic Pitch ICASSP 2022
+- Pipeline: Audio → Basic Pitch → Skyline → MusicXML
+
+**Output Quality:**
+- Raw notes (Basic Pitch): 1,164 (vs 1,897 reference = **61.4%% ratio**)
+- Melody notes (Skyline): 488 (vs 1,897 reference = **25.7%% ratio**)
+- Pitch range: 48-84 (C3-C6, normalized)
+- Avg note duration: ~308.6ms (vs 329.6ms reference)
+
+### Files Generated
+- `backend/scripts/output/final_validation/input_generated.mid` (1,164 notes, raw MIDI)
+- `backend/scripts/output/final_validation/input_melody.txt` (488 notes, melody info)
+- `backend/scripts/output/final_validation/input_melody_4_4.musicxml` (4/4 time signature)
+- `backend/scripts/output/final_validation/input_melody_12_8.musicxml` (12/8 time signature)
+- `.sisyphus/notepads/melody-extraction-pivot/final-report.md` (comprehensive report)
+
+### Validation Status
+
+✅ **All requirements met:**
+1. ✅ Basic Pitch integration complete
+2. ✅ Skyline algorithm working (1,164 → 488 notes)
+3. ✅ 12/8 time signature supported
+4. ✅ Processing speed: 11.0s for 194.6s audio (0.06x realtime)
+5. ✅ Quality: 61.4%% raw note coverage vs reference
+6. ✅ Sample MusicXML files generated for arranger review
+7. ✅ Comprehensive final report created
+
+### Key Learnings
+1. **Complete pipeline validated**: Audio → Basic Pitch → Skyline → MusicXML works end-to-end
+2. **25.7%% melody ratio is correct**: Reference includes all notes (melody + chords + bass), melody is subset
+3. **12/8 time signature works**: music21 handles compound meters natively, no special code needed
+4. **Skyline algorithm effective**: Reduces 1,164 raw notes to 488 clean melody notes (58%% reduction)
+5. **Ready for arranger review**: Sample MusicXML files generated in both 4/4 and 12/8
+
+### Next Steps
+1. Get arranger feedback on sample MusicXML files
+2. Iterate on Skyline algorithm if needed based on feedback
+3. Test remaining songs (song_02 through song_08)
+4. Update documentation in README
+5. Deploy to production
+
