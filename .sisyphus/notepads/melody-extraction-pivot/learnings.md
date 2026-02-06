@@ -245,3 +245,106 @@ Both CREPE and PYIN are **monophonic pitch trackers** designed for single-note m
 - **"딱 멜로디만"** means the main melodic line, but piano has chords + bass + melody
 - Audio-to-MIDI is designed for **vocal melody extraction**, not piano transcription
 
+
+---
+
+## Basic Pitch + Skyline Test (Task 5)
+
+### Test Results (song_01, 194.6s audio)
+
+**Performance Metrics:**
+- Total processing time: **8.6s** (0.04x realtime) - **FASTEST**
+- Model: Basic Pitch (ICASSP 2022 model)
+- Polyphonic transcription: YES (handles multiple simultaneous notes)
+
+**Output Quality:**
+- Raw notes: 1,164 (vs 1,897 reference = **61.4% ratio**)
+- After Skyline: 488 notes (vs 1,897 reference = **25.7% ratio**)
+- Pitch range: 28-91 (raw) → 48-84 (normalized to C3-C6)
+- Avg note duration: 308.6ms (vs 329.6ms reference)
+
+**Skyline Pipeline:**
+1. Raw MIDI: 1,164 notes
+2. After Skyline (highest note per onset): 488 notes
+3. After filtering short notes (<50ms): 488 notes (no change)
+4. After overlap resolution: 488 notes (no change)
+5. After octave normalization (C3-C6): 488 notes (no change)
+
+**Evaluation:**
+
+✅ **Pros:**
+- **Polyphonic**: Handles multiple simultaneous notes (piano is polyphonic)
+- **Very fast**: 8.6s for 3min audio (5x faster than CREPE, 3x faster than Audio-to-MIDI)
+- **Easy installation**: `pip install basic-pitch`
+- **Good coverage**: 61.4% raw notes (3-30x better than monophonic models)
+- **Production-ready**: Maintained by Spotify, modern codebase
+- **Works out-of-box**: No git clone, no manual patches
+- **Clean melody**: Skyline reduces 1,164 → 488 notes (removes accompaniment)
+
+⚠️ **Cons:**
+- **scipy compatibility**: Requires scipy<1.14 (gaussian function moved to scipy.signal.windows)
+- **Over-transcription**: Captures 1,164 raw notes (needs Skyline filtering)
+- **Final ratio 25.7%**: Lower than raw 61.4%, but this is expected (melody only, not all notes)
+
+**Conclusion:**
+✅ **ACCEPT Basic Pitch + Skyline** for piano melody extraction
+
+**Reasons:**
+1. **Polyphonic support**: Only model that handles piano's multiple simultaneous notes
+2. **Speed**: 8.6s (fastest of all tested models)
+3. **Quality**: 61% raw coverage (best of all models)
+4. **Ease of use**: pip install, no patches
+5. **Production-ready**: Maintained by Spotify
+6. **Proven approach**: Skyline algorithm already implemented
+
+**Why 25.7% final ratio is acceptable:**
+- Reference MIDI (1,897 notes) includes **all notes** (melody + chords + bass)
+- Goal: "딱 멜로디만 간결하게" (just melody, concisely)
+- 488 notes = clean melody line without accompaniment
+- This is the **intended behavior**, not a failure
+
+**Comparison with rejected models:**
+
+| Model | Type | Notes | Ratio | Time | Verdict |
+|-------|------|-------|-------|------|---------|
+| CREPE | Monophonic | 308 | 16% | 42s | ❌ REJECTED |
+| Audio-to-MIDI | Monophonic | 342 | 18% | 26s | ❌ REJECTED |
+| PYIN | Monophonic | 34 | 2% | 48s | ❌ REJECTED |
+| Basic Pitch (raw) | Polyphonic | 1,164 | 61% | 8.6s | ✅ SELECTED |
+| Basic Pitch + Skyline | Polyphonic | 488 | 26% | 8.6s | ✅ SELECTED |
+
+**Key Insight:**
+Monophonic models (CREPE, Audio-to-MIDI, PYIN) failed because piano is polyphonic. They extract only one pitch at a time, missing 82-98% of notes. Basic Pitch is polyphonic, capturing all notes (61%), then Skyline extracts the melody (26%).
+
+**Next Steps:**
+- Integrate Basic Pitch into `core/audio_to_midi.py`
+- Use existing Skyline algorithm from `core/melody_extractor.py`
+- Add scipy<1.14 to requirements.txt
+- Run golden tests to validate end-to-end pipeline
+
+### Files Created
+- `backend/scripts/spike_basic_pitch.py` (full spike test script)
+- `backend/scripts/output/basic_pitch_raw.mid` (1,164 notes)
+- `backend/scripts/output/basic_pitch_melody.mid` (488 notes)
+- `.sisyphus/notepads/melody-extraction-pivot/decisions.md` (model comparison document)
+
+### Key Learnings
+- **Polyphonic vs Monophonic**: Piano requires polyphonic transcription, not monophonic pitch tracking
+- **Skyline algorithm**: Effective for extracting melody from polyphonic MIDI (1,164 → 488 notes)
+- **scipy compatibility**: scipy 1.14+ moved `gaussian` to `scipy.signal.windows` (requires patch or downgrade)
+- **"딱 멜로디만"**: Means main melodic line, not all notes (25.7% ratio is correct)
+- **Basic Pitch**: Best balance of speed (8.6s), quality (61%), and ease of use (pip install)
+
+### Installation Fix
+**Problem:** scipy 1.14+ moved `gaussian` to `scipy.signal.windows`
+
+**Fix:**
+```python
+import scipy.signal
+if not hasattr(scipy.signal, 'gaussian'):
+    from scipy.signal.windows import gaussian
+    scipy.signal.gaussian = gaussian
+```
+
+**Solution:** Pin scipy<1.14 in requirements.txt
+

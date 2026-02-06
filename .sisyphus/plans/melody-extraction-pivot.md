@@ -379,7 +379,7 @@ Phase 3: 정리 + 검증 (Day 9-10)
 
 ---
 
-- [ ] 5. 모델 비교 + 선택
+- [x] 5. 모델 비교 + 선택 (DECISION: Basic Pitch + Skyline)
 
   **What to do**:
   - 3개 모델 결과 비교 테이블 작성
