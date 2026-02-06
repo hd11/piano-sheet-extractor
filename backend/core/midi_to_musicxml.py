@@ -71,7 +71,7 @@ def quarter_length_to_seconds(ql: float, bpm: float) -> float:
 
 def notes_to_stream(
     notes: List[Note], bpm: float, key: str, time_signature: str = "4/4"
-) -> music21.stream.Stream:
+) -> "music21.stream.Stream":  # type: ignore
     """
     Note 리스트를 music21 Stream 객체로 변환합니다.
 
@@ -108,21 +108,21 @@ def notes_to_stream(
         >>> isinstance(stream, music21.stream.Stream)
         True
     """
-    stream = music21.stream.Stream()
+    stream = music21.stream.Stream()  # type: ignore
 
     # 메타데이터 설정
-    stream.append(music21.tempo.MetronomeMark(number=bpm))
+    stream.append(music21.tempo.MetronomeMark(number=bpm))  # type: ignore
 
     # Parse key string (e.g., "A major" → Key('A', 'major'))
     key_parts = key.split()
     if len(key_parts) == 2:
         tonic, mode = key_parts
-        stream.append(music21.key.Key(tonic, mode))
+        stream.append(music21.key.Key(tonic, mode))  # type: ignore
     else:
         # Fallback: try to parse as-is
-        stream.append(music21.key.Key(key))
+        stream.append(music21.key.Key(key))  # type: ignore
 
-    stream.append(music21.meter.TimeSignature(time_signature))
+    stream.append(music21.meter.TimeSignature(time_signature))  # type: ignore
 
     # Note 변환 (초 → quarterLength)
     # Use coarse quantization grid to avoid very short durations
@@ -132,7 +132,7 @@ def notes_to_stream(
     quantize_grid = 0.25  # 16th note
 
     for n in notes:
-        m21_note = music21.note.Note(n.pitch)
+        m21_note = music21.note.Note(n.pitch)  # type: ignore
 
         # Quantize offset/duration to grid
         offset_ql = seconds_to_quarter_length(n.onset, bpm)
@@ -143,17 +143,17 @@ def notes_to_stream(
             quantize_grid, round(duration_ql / quantize_grid) * quantize_grid
         )
 
-        m21_note.duration.quarterLength = duration_ql
-        m21_note.volume.velocity = n.velocity
+        m21_note.duration.quarterLength = duration_ql  # type: ignore
+        m21_note.volume.velocity = n.velocity  # type: ignore
 
         # IMPORTANT: use insert() to preserve the quantized offset.
         # Stream.append() will place the element at the end and overwrite offsets.
-        stream.insert(offset_ql, m21_note)
+        stream.insert(offset_ql, m21_note)  # type: ignore
 
     return stream
 
 
-def stream_to_musicxml(stream: music21.stream.Stream) -> str:
+def stream_to_musicxml(stream: "music21.stream.Stream") -> str:  # type: ignore
     """
     music21 Stream을 MusicXML 문자열로 변환합니다.
 
@@ -184,16 +184,16 @@ def stream_to_musicxml(stream: music21.stream.Stream) -> str:
     try:
         # Clean up stream: remove any elements with invalid durations
         # This is a workaround for music21 export issues
-        for element in stream.flatten().notes:
-            if element.duration.quarterLength <= 0:
-                element.duration.quarterLength = 0.5  # Default to 8th note
+        for element in stream.flatten().notes:  # type: ignore
+            if element.duration.quarterLength <= 0:  # type: ignore
+                element.duration.quarterLength = 0.5  # type: ignore
 
         # Always normalize notation/measures before export
-        stream = stream.makeMeasures(inPlace=False)
-        stream = stream.makeNotation(inPlace=False)
+        stream = stream.makeMeasures(inPlace=False)  # type: ignore
+        stream = stream.makeNotation(inPlace=False)  # type: ignore
 
         # Stream을 MusicXML 파일로 작성
-        stream.write("musicxml", fp=temp_path)
+        stream.write("musicxml", fp=temp_path)  # type: ignore
 
         # MusicXML 파일을 문자열로 읽기
         with open(temp_path, "r", encoding="utf-8") as f:
@@ -211,25 +211,25 @@ def stream_to_musicxml(stream: music21.stream.Stream) -> str:
 
         try:
             # Rebuild stream by inserting only notes/chords at their offsets.
-            rebuilt = music21.stream.Stream()
+            rebuilt = music21.stream.Stream()  # type: ignore
 
             # Preserve metadata from original stream when possible
             for cls in (
-                music21.tempo.MetronomeMark,
-                music21.key.Key,
-                music21.meter.TimeSignature,
+                music21.tempo.MetronomeMark,  # type: ignore
+                music21.key.Key,  # type: ignore
+                music21.meter.TimeSignature,  # type: ignore
             ):
-                for el in stream.getElementsByClass(cls):
-                    rebuilt.insert(float(el.offset), el)
+                for el in stream.getElementsByClass(cls):  # type: ignore
+                    rebuilt.insert(float(el.offset), el)  # type: ignore
 
-            for element in stream.flatten().notes:
-                rebuilt.insert(float(element.offset), element)
+            for element in stream.flatten().notes:  # type: ignore
+                rebuilt.insert(float(element.offset), element)  # type: ignore
 
             # Make notation/measures to satisfy MusicXML writer
-            rebuilt = rebuilt.makeMeasures(inPlace=False)
-            rebuilt = rebuilt.makeNotation(inPlace=False)
+            rebuilt = rebuilt.makeMeasures(inPlace=False)  # type: ignore
+            rebuilt = rebuilt.makeNotation(inPlace=False)  # type: ignore
 
-            rebuilt.write("musicxml", fp=temp_path)
+            rebuilt.write("musicxml", fp=temp_path)  # type: ignore
             with open(temp_path, "r", encoding="utf-8") as f:
                 musicxml_str = f.read()
             return musicxml_str
@@ -302,7 +302,7 @@ def notes_to_piano_score(
     key: str,
     time_signature: str = "4/4",
     split_point: int = 60,
-) -> music21.stream.Score:
+) -> "music21.stream.Score":  # type: ignore
     """
     Convert Note list to a two-staff piano Score (treble + bass clef).
 
@@ -323,31 +323,31 @@ def notes_to_piano_score(
     rh_notes, lh_notes = split_hands(notes, split_point)
 
     # Create Score
-    score = music21.stream.Score()
+    score = music21.stream.Score()  # type: ignore
 
     # Parse key
     key_parts = key.split()
     if len(key_parts) == 2:
         tonic, mode = key_parts
-        key_obj = music21.key.Key(tonic, mode)
+        key_obj = music21.key.Key(tonic, mode)  # type: ignore
     else:
-        key_obj = music21.key.Key(key)
+        key_obj = music21.key.Key(key)  # type: ignore
 
-    ts_obj = music21.meter.TimeSignature(time_signature)
-    tempo_obj = music21.tempo.MetronomeMark(number=bpm)
+    ts_obj = music21.meter.TimeSignature(time_signature)  # type: ignore
+    tempo_obj = music21.tempo.MetronomeMark(number=bpm)  # type: ignore
 
     quantize_grid = 0.25  # 16th note
 
     # Helper to build a Part from notes
-    def _build_part(part_notes: List[Note], clef_obj) -> music21.stream.Part:
-        part = music21.stream.Part()
-        part.insert(0, clef_obj)
-        part.insert(0, key_obj.__deepcopy__())
-        part.insert(0, ts_obj.__deepcopy__())
-        part.insert(0, tempo_obj.__deepcopy__())
+    def _build_part(part_notes: List[Note], clef_obj) -> "music21.stream.Part":  # type: ignore
+        part = music21.stream.Part()  # type: ignore
+        part.insert(0, clef_obj)  # type: ignore
+        part.insert(0, key_obj.__deepcopy__())  # type: ignore
+        part.insert(0, ts_obj.__deepcopy__())  # type: ignore
+        part.insert(0, tempo_obj.__deepcopy__())  # type: ignore
 
         for n in part_notes:
-            m21_note = music21.note.Note(n.pitch)
+            m21_note = music21.note.Note(n.pitch)  # type: ignore
 
             offset_ql = seconds_to_quarter_length(n.onset, bpm)
             offset_ql = max(0.0, round(offset_ql / quantize_grid) * quantize_grid)
@@ -357,22 +357,22 @@ def notes_to_piano_score(
                 quantize_grid, round(duration_ql / quantize_grid) * quantize_grid
             )
 
-            m21_note.duration.quarterLength = duration_ql
-            m21_note.volume.velocity = n.velocity
-            part.insert(offset_ql, m21_note)
+            m21_note.duration.quarterLength = duration_ql  # type: ignore
+            m21_note.volume.velocity = n.velocity  # type: ignore
+            part.insert(offset_ql, m21_note)  # type: ignore
 
         return part
 
     # Right Hand (treble clef)
-    rh_part = _build_part(rh_notes, music21.clef.TrebleClef())
-    rh_part.partName = "Piano"
-    rh_part.partAbbreviation = "Pno."
+    rh_part = _build_part(rh_notes, music21.clef.TrebleClef())  # type: ignore
+    rh_part.partName = "Piano"  # type: ignore
+    rh_part.partAbbreviation = "Pno."  # type: ignore
 
     # Left Hand (bass clef)
-    lh_part = _build_part(lh_notes, music21.clef.BassClef())
+    lh_part = _build_part(lh_notes, music21.clef.BassClef())  # type: ignore
 
-    score.insert(0, rh_part)
-    score.insert(0, lh_part)
+    score.insert(0, rh_part)  # type: ignore
+    score.insert(0, lh_part)  # type: ignore
 
     return score
 
@@ -395,7 +395,7 @@ def notes_to_piano_musicxml(
         time_signature: str - 박자표 (기본값: "4/4")
         split_point: int - RH/LH split MIDI pitch (default 60 = C4)
         polyphonic: bool - If True, create two-staff piano score.
-                          If False, use legacy single-staff mode.
+                           If False, use legacy single-staff mode.
 
     Returns:
         str - MusicXML 형식의 문자열
@@ -404,8 +404,8 @@ def notes_to_piano_musicxml(
         # Legacy single-staff mode
         return notes_to_musicxml(notes, bpm, key, time_signature)
 
-    score = notes_to_piano_score(notes, bpm, key, time_signature, split_point)
-    return stream_to_musicxml(score)
+    score = notes_to_piano_score(notes, bpm, key, time_signature, split_point)  # type: ignore
+    return stream_to_musicxml(score)  # type: ignore
 
 
 # ============================================================================
@@ -468,8 +468,8 @@ def convert_midi_to_musicxml(
 
     # Extract BPM from MIDI if not provided
     if bpm is None:
-        pm = pm_lib.PrettyMIDI(str(midi_path))
-        tempo_changes = pm.get_tempo_changes()
+        pm = pm_lib.PrettyMIDI(str(midi_path))  # type: ignore
+        tempo_changes = pm.get_tempo_changes()  # type: ignore
         if len(tempo_changes[1]) > 0:
             bpm = float(tempo_changes[1][0])  # Use first tempo marking
             logger.info(f"Extracted BPM from MIDI: {bpm}")

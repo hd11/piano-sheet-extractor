@@ -114,3 +114,63 @@
 ### Notes
 - Default parameter values in moved functions use literal values (3.0, 1.0) instead of module constants (ONSET_TOLERANCE, DURATION_TOLERANCE_RATIO) since those constants live in musicxml_comparator.py. The actual default values are identical.
 - NoteInfo was also moved since it's used in function signatures. musicxml_comparator.py now imports NoteInfo from comparison_utils.
+
+## [2026-02-06] Task 3: LSP Type Error Fixes
+
+### Errors Fixed
+
+#### comparison_utils.py
+- **Line 32**: `dtw_func` import possibly unbound — Added `dtw_func = None` in except block with type: ignore
+- **Lines 83, 160, 173, 214**: `mir_eval` possibly unbound — Added `mir_eval = None` in except block with type: ignore
+- **Line 100**: `offset_ratio` type mismatch — Changed parameter type from `float = None` to `Optional[float] = None`
+- **Line 491**: `dtw_func` used without None check — Added `if not HAS_DTW or dtw_func is None:` guard
+- **Line 392**: `mir_eval.onset` used without None check — Added `if not HAS_MIR_EVAL or mir_eval is None:` guard
+- **Line 261**: `mir_eval.util` used without None check — Added `if HAS_MIR_EVAL and mir_eval is not None:` guard
+
+#### midi_to_musicxml.py
+- **Lines 74, 110, 124, 155, 191, 192, 213, 219, 229, 231, 304, 325, 335, 341, 342**: music21 type issues — Added `# type: ignore` comments (music21 has no type stubs)
+- **Return type annotations**: Changed to string literals with `# type: ignore` (e.g., `-> "music21.stream.Stream"  # type: ignore`)
+
+### Changes Made
+
+#### comparison_utils.py
+1. Added `Callable` to imports for type hints
+2. Added `mir_eval.onset` to conditional import block
+3. Set `mir_eval = None` and `dtw_func = None` in except blocks (with type: ignore)
+4. Added None checks before using conditionally imported modules:
+   - `if not HAS_MIR_EVAL or mir_eval is None:` in compute_mir_eval_metrics()
+   - `if not HAS_MIR_EVAL or mir_eval is None:` in compute_onset_only_f1()
+   - `if HAS_MIR_EVAL and mir_eval is not None:` in notes_to_intervals_and_pitches()
+   - `if not HAS_DTW or dtw_func is None:` in compute_pitch_contour_similarity()
+5. Added `# type: ignore` comments on mir_eval and dtw_func calls
+6. Fixed parameter type: `duration: Optional[float] = None` in notes_to_chroma_vector()
+
+#### midi_to_musicxml.py
+1. Added `# type: ignore` comments to all music21 method calls and attribute accesses
+2. Changed return type annotations to string literals with `# type: ignore`:
+   - `notes_to_stream()` → `-> "music21.stream.Stream"  # type: ignore`
+   - `stream_to_musicxml()` → `-> "music21.stream.Stream"  # type: ignore`
+   - `notes_to_piano_score()` → `-> "music21.stream.Score"  # type: ignore`
+   - `_build_part()` → `-> "music21.stream.Part"  # type: ignore`
+3. Added `# type: ignore` to all music21 object instantiations and method calls
+
+### Verification
+- **Syntax check**: PASS (both files parse correctly with ast.parse)
+- **Import test**: PASS (no runtime errors when importing modules)
+- **LSP errors reduced**: YES (runtime type issues fixed, only missing library stubs remain)
+
+### Key Learnings
+1. **Conditional imports with None**: When a module import fails, set the variable to None in the except block, then check `if module is not None:` before using it
+2. **Type hints for optional imports**: Use `Optional[Type]` for variables that might be None due to failed imports
+3. **Type stubs unavailable**: music21 and dtw-python don't have type stubs, so `# type: ignore` is the correct approach
+4. **String literal return types**: When returning types from unresolved imports, use string literals: `-> "music21.stream.Stream"  # type: ignore`
+5. **Graceful degradation**: Both files handle missing dependencies gracefully by returning default values (0.0, empty dicts) when imports fail
+
+### Files Modified
+- `backend/core/comparison_utils.py` — 6 fixes, 1 parameter type correction
+- `backend/core/midi_to_musicxml.py` — 12+ type: ignore comments added
+
+### Testing Notes
+- No runtime errors when importing modules
+- Syntax validation passed for both files
+- Type checking errors reduced to only missing library stubs (expected)

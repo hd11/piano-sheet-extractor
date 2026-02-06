@@ -10,7 +10,7 @@ Always convert with mir_eval.util.midi_to_hz() before calling mir_eval functions
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
 
 import numpy as np
 
@@ -21,10 +21,12 @@ try:
     import mir_eval
     import mir_eval.transcription
     import mir_eval.util
+    import mir_eval.onset
 
     HAS_MIR_EVAL = True
 except ImportError:
     HAS_MIR_EVAL = False
+    mir_eval = None  # type: ignore
     logger.warning("mir_eval not installed. Composite metrics will be unavailable.")
 
 # Try importing dtw; graceful fallback
@@ -34,6 +36,7 @@ try:
     HAS_DTW = True
 except ImportError:
     HAS_DTW = False
+    dtw_func = None  # type: ignore
     logger.warning("dtw-python not installed. DTW alignment will be unavailable.")
 
 
@@ -254,8 +257,8 @@ def notes_to_intervals_and_pitches(
     intervals = np.array([[n.onset, n.offset] for n in notes])
     pitches_midi = np.array([n.pitch for n in notes])
 
-    if HAS_MIR_EVAL:
-        pitches_hz = mir_eval.util.midi_to_hz(pitches_midi)
+    if HAS_MIR_EVAL and mir_eval is not None:
+        pitches_hz = mir_eval.util.midi_to_hz(pitches_midi)  # type: ignore
     else:
         # Manual conversion: Hz = 440 * 2^((midi - 69) / 12)
         pitches_hz = 440.0 * (2.0 ** ((pitches_midi - 69.0) / 12.0))
@@ -272,7 +275,7 @@ def notes_to_pitch_class_sequence(notes: List[NoteEvent]) -> np.ndarray:
 
 
 def notes_to_chroma_vector(
-    notes: List[NoteEvent], duration: float = None
+    notes: List[NoteEvent], duration: Optional[float] = None
 ) -> np.ndarray:
     """
     Compute a 12-bin chroma histogram from notes, weighted by duration.
@@ -320,7 +323,7 @@ def compute_mir_eval_metrics(
     Returns:
         Dict with precision, recall, f1 keys
     """
-    if not HAS_MIR_EVAL:
+    if not HAS_MIR_EVAL or mir_eval is None:
         return {"precision": 0.0, "recall": 0.0, "f1": 0.0}
 
     ref_intervals, ref_pitches = notes_to_intervals_and_pitches(ref_notes)
@@ -332,7 +335,7 @@ def compute_mir_eval_metrics(
     try:
         if offset_ratio is not None:
             precision, recall, f1, _ = (
-                mir_eval.transcription.precision_recall_f1_overlap(
+                mir_eval.transcription.precision_recall_f1_overlap(  # type: ignore
                     ref_intervals,
                     ref_pitches,
                     gen_intervals,
@@ -345,7 +348,7 @@ def compute_mir_eval_metrics(
         else:
             # Onset-only matching (no offset check)
             precision, recall, f1, _ = (
-                mir_eval.transcription.precision_recall_f1_overlap(
+                mir_eval.transcription.precision_recall_f1_overlap(  # type: ignore
                     ref_intervals,
                     ref_pitches,
                     gen_intervals,
@@ -376,7 +379,7 @@ def compute_onset_only_f1(
 
     Uses mir_eval onset detection metrics.
     """
-    if not HAS_MIR_EVAL:
+    if not HAS_MIR_EVAL or mir_eval is None:
         return 0.0
 
     if not ref_notes or not gen_notes:
@@ -386,7 +389,7 @@ def compute_onset_only_f1(
     gen_onsets = np.array(sorted(n.onset for n in gen_notes))
 
     try:
-        result = mir_eval.onset.f_measure(
+        result = mir_eval.onset.f_measure(  # type: ignore
             ref_onsets, gen_onsets, window=onset_tolerance
         )
         # mir_eval.onset.f_measure returns (f_measure, precision, recall) tuple
@@ -474,7 +477,7 @@ def compute_pitch_contour_similarity(
     Returns:
         float in [0, 1] where 1 = identical contour
     """
-    if not HAS_DTW:
+    if not HAS_DTW or dtw_func is None:
         return 0.0
 
     if not ref_notes or not gen_notes:
@@ -488,7 +491,7 @@ def compute_pitch_contour_similarity(
     )
 
     try:
-        alignment = dtw_func(ref_pitches, gen_pitches)
+        alignment = dtw_func(ref_pitches, gen_pitches)  # type: ignore
         # Normalize distance by path length and pitch range
         path_len = len(alignment.index1)
         if path_len == 0:
