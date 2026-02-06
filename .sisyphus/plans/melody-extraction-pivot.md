@@ -468,7 +468,7 @@ Phase 3: 정리 + 검증 (Day 9-10)
 
 ---
 
-- [ ] 7. Pitch → MIDI 변환 (CREPE/Librosa 선택 시)
+- [x] 7. Pitch → MIDI 변환 (SKIPPED - Basic Pitch outputs MIDI directly)
 
   **What to do** (CREPE 또는 Librosa 선택 시):
   - Pitch (Hz) → MIDI 노트 변환 로직 구현
@@ -503,7 +503,7 @@ Phase 3: 정리 + 검증 (Day 9-10)
 
 ---
 
-- [ ] 8. 12/8 박자 지원
+- [x] 8. 12/8 박자 지원 (verified working)
 
   **What to do**:
   - `midi_to_musicxml.py` 수정

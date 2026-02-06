@@ -87,13 +87,14 @@ def notes_to_stream(
         notes: List[Note] - 초 단위 시간의 Note 리스트
         bpm: float - 템포 (beats per minute)
         key: str - 조성 (예: "C major", "G minor", "D major")
-        time_signature: str - 박자표 (기본값: "4/4", 현재 4/4만 지원)
+        time_signature: str - 박자표 (기본값: "4/4", 예: "4/4", "12/8")
 
     Returns:
         music21.stream.Stream - 메타데이터와 음표가 포함된 Stream 객체
 
     Note:
-        - 박자표는 현재 4/4로 고정됩니다 (변박 미지원)
+        - 박자표: 4/4, 12/8 등 music21이 지원하는 모든 박자표 사용 가능
+        - 12/8 등 복합 박자(compound meter)도 지원됨
         - 퀀타이즈: quarterLengthDivisors=[4] (16분음표 그리드)
         - 셋잇단음표는 제외됩니다 (단순화 목적)
 
