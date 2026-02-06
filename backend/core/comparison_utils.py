@@ -43,6 +43,15 @@ except ImportError:
 
 
 @dataclass
+class NoteInfo:
+    """Note representation for comparison (quarterLength-based)."""
+
+    pitch: int  # MIDI pitch (0-127)
+    onset: float  # quarterLength 단위 시작 시간
+    duration: float  # quarterLength 단위 길이
+
+
+@dataclass
 class NoteEvent:
     """Universal note representation for comparison (seconds-based)."""
 
@@ -53,6 +62,172 @@ class NoteEvent:
     @property
     def duration(self) -> float:
         return self.offset - self.onset
+
+
+# ============================================================================
+# Greedy Note Matching (quarterLength-based)
+# ============================================================================
+
+
+def _pitch_to_pitch_class(pitch: int) -> int:
+    """
+    Convert MIDI pitch to pitch class (0-11).
+
+    Examples:
+        C4 (60) -> 0
+        C#4 (61) -> 1
+        C5 (72) -> 0 (same pitch class as C4)
+
+    Args:
+        pitch: MIDI note number (0-127)
+
+    Returns:
+        Pitch class (0-11)
+    """
+    return pitch % 12
+
+
+def _match_notes(
+    ref_notes: List[NoteInfo],
+    gen_notes: List[NoteInfo],
+    onset_tolerance: float = 3.0,
+    duration_tolerance_ratio: float = 1.0,
+) -> int:
+    """
+    Reference 음표와 Generated 음표를 매칭하여 일치 개수를 반환합니다.
+
+    매칭 기준:
+    1. Pitch가 정확히 일치
+    2. Onset이 ±onset_tolerance 이내
+    3. Duration이 ±duration_tolerance_ratio 비율 이내
+
+    Greedy matching: 각 ref 노트에 대해 가장 가까운 gen 노트 찾기
+    이미 매칭된 gen 노트는 재사용 금지
+
+    Args:
+        ref_notes: Reference 음표 리스트
+        gen_notes: Generated 음표 리스트
+        onset_tolerance: onset 허용 오차 (quarterLength)
+        duration_tolerance_ratio: duration 허용 비율 (0.0 ~ 1.0)
+
+    Returns:
+        매칭된 음표 개수
+    """
+    if not ref_notes or not gen_notes:
+        return 0
+
+    matched_count = 0
+    used_gen_indices = set()
+
+    for ref_note in ref_notes:
+        best_match_idx = None
+        best_onset_diff = float("inf")
+
+        for i, gen_note in enumerate(gen_notes):
+            if i in used_gen_indices:
+                continue
+
+            # 1. Pitch 일치 확인
+            if ref_note.pitch != gen_note.pitch:
+                continue
+
+            # 2. Onset 허용 오차 확인
+            onset_diff = abs(ref_note.onset - gen_note.onset)
+            if onset_diff > onset_tolerance:
+                continue
+
+            # 3. Duration 허용 비율 확인
+            duration_diff = abs(ref_note.duration - gen_note.duration)
+            max_duration = max(ref_note.duration, gen_note.duration)
+            if max_duration > 0:
+                duration_ratio = duration_diff / max_duration
+                if duration_ratio > duration_tolerance_ratio:
+                    continue
+
+            # 모든 조건 만족 - 가장 onset이 가까운 것 선택
+            if onset_diff < best_onset_diff:
+                best_onset_diff = onset_diff
+                best_match_idx = i
+
+        if best_match_idx is not None:
+            matched_count += 1
+            used_gen_indices.add(best_match_idx)
+
+    return matched_count
+
+
+def _match_notes_pitch_class(
+    ref_notes: List[NoteInfo],
+    gen_notes: List[NoteInfo],
+    onset_tolerance: float = 3.0,
+    duration_tolerance_ratio: float = 1.0,
+) -> int:
+    """
+    Match notes using pitch class (ignoring octave).
+
+    Same as _match_notes but compares pitch % 12 instead of exact pitch.
+
+    Matching criteria:
+    1. Pitch class matches (ignoring octave)
+    2. Onset within ±onset_tolerance
+    3. Duration within ±duration_tolerance_ratio
+
+    Greedy matching: for each ref note, find closest gen note by onset.
+    Already matched gen notes are not reused.
+
+    Args:
+        ref_notes: Reference note list
+        gen_notes: Generated note list
+        onset_tolerance: onset tolerance (quarterLength)
+        duration_tolerance_ratio: duration tolerance ratio (0.0 ~ 1.0)
+
+    Returns:
+        Number of matched notes
+    """
+    if not ref_notes or not gen_notes:
+        return 0
+
+    matched_count = 0
+    used_gen_indices = set()
+
+    for ref_note in ref_notes:
+        best_match_idx = None
+        best_onset_diff = float("inf")
+
+        ref_pitch_class = _pitch_to_pitch_class(ref_note.pitch)
+
+        for i, gen_note in enumerate(gen_notes):
+            if i in used_gen_indices:
+                continue
+
+            # 1. Pitch CLASS 일치 확인 (옥타브 무시)
+            gen_pitch_class = _pitch_to_pitch_class(gen_note.pitch)
+            if ref_pitch_class != gen_pitch_class:
+                continue
+
+            # 2. Onset 허용 오차 확인
+            onset_diff = abs(ref_note.onset - gen_note.onset)
+            if onset_diff > onset_tolerance:
+                continue
+
+            # 3. Duration 허용 비율 확인
+            duration_diff = abs(ref_note.duration - gen_note.duration)
+            max_duration = max(ref_note.duration, gen_note.duration)
+            if max_duration > 0:
+                duration_ratio = duration_diff / max_duration
+                if duration_ratio > duration_tolerance_ratio:
+                    continue
+
+            # 모든 조건 만족 - 가장 onset이 가까운 것 선택
+            if onset_diff < best_onset_diff:
+                best_onset_diff = onset_diff
+                best_match_idx = i
+
+        if best_match_idx is not None:
+            matched_count += 1
+            used_gen_indices.add(best_match_idx)
+
+    return matched_count
 
 
 # ============================================================================

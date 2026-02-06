@@ -91,3 +91,26 @@
 - All tests use mocking for file I/O (no actual files created)
 - Tests focus on core functions only: create_job, get_job, update_job_status
 - Edge cases covered: missing jobs, empty fields, multiple transitions, timestamp updates
+
+## [2026-02-06] Task 2: Consolidate Comparison Functions
+
+### Functions Moved
+- _match_notes() — from musicxml_comparator to comparison_utils
+- _match_notes_pitch_class() — from musicxml_comparator to comparison_utils
+- _pitch_to_pitch_class() — helper function, also moved
+- NoteInfo dataclass — moved to comparison_utils (shared type)
+
+### Changes Made
+- comparison_utils.py: Added NoteInfo dataclass + 3 functions (~170 lines)
+- musicxml_comparator.py: Removed definitions, added imports from comparison_utils
+- midi_comparator.py: No changes needed (uses compute_composite_metrics, not greedy matching)
+
+### Verification
+- Syntax check: PASS (py_compile on both files)
+- Import compatibility: PASS (import chain correct, fails only on missing music21/numpy — environment issue)
+- Code duplication eliminated: YES (0 `def _match_notes` in musicxml_comparator.py)
+- Golden tests: Could not run (no Python environment with dependencies available — Docker not running, no venv)
+
+### Notes
+- Default parameter values in moved functions use literal values (3.0, 1.0) instead of module constants (ONSET_TOLERANCE, DURATION_TOLERANCE_RATIO) since those constants live in musicxml_comparator.py. The actual default values are identical.
+- NoteInfo was also moved since it's used in function signatures. musicxml_comparator.py now imports NoteInfo from comparison_utils.
