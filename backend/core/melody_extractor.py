@@ -84,6 +84,49 @@ def apply_hybrid_scoring(notes: List[Note]) -> List[Note]:
     return result
 
 
+def apply_hybrid_scoring_v2(notes: List[Note]) -> List[Note]:
+    """
+    동일 onset 그룹에서 가장 높은 hybrid_score를 가진 노트 선택 (tuned onset tolerance)
+
+    Args:
+        notes: Note 리스트
+
+    Returns:
+        Hybrid Scoring 적용된 Note 리스트
+    """
+    ONSET_TOLERANCE = 0.15  # 150ms (tuned)
+
+    if not notes:
+        return notes
+
+    sorted_notes = sorted(notes, key=lambda n: n.onset)
+    result = []
+    prev_pitch = None
+
+    i = 0
+    while i < len(sorted_notes):
+        current = sorted_notes[i]
+
+        # 동시 발음 그룹 찾기
+        group = [current]
+        j = i + 1
+        while (
+            j < len(sorted_notes)
+            and abs(sorted_notes[j].onset - current.onset) <= ONSET_TOLERANCE
+        ):
+            group.append(sorted_notes[j])
+            j += 1
+
+        # 그룹에서 가장 높은 hybrid_score 선택 (동점: pitch 높은 것 선택)
+        best = max(group, key=lambda n: (hybrid_score(n, prev_pitch), n.pitch))
+        result.append(best)
+        prev_pitch = best.pitch
+
+        i = j
+
+    return result
+
+
 def apply_skyline(notes: List[Note]) -> List[Note]:
     """
     동일 onset에 여러 음표가 있을 때 최고음만 선택
@@ -251,7 +294,7 @@ def extract_melody(midi_path: Path) -> List[Note]:
     notes = parse_midi(midi_path)
 
     # 2. Hybrid Scoring (velocity + contour + register 가중합)
-    notes = apply_hybrid_scoring(notes)
+    notes = apply_hybrid_scoring_v2(notes)
 
     # 3. 짧은 음표 제거
     notes = filter_short_notes(notes)
