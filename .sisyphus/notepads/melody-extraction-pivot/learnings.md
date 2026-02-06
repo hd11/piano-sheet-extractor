@@ -348,3 +348,57 @@ if not hasattr(scipy.signal, 'gaussian'):
 
 **Solution:** Pin scipy<1.14 in requirements.txt
 
+
+---
+
+## Basic Pitch Integration (Task 6)
+
+### Summary
+Replaced Pop2Piano with Basic Pitch in `backend/core/audio_to_midi.py`.
+
+### Changes Made
+1. **Backup created**: `backend/core/audio_to_midi_pop2piano.py.bak`
+2. **Removed Pop2Piano dependencies**:
+   - Removed: torch, transformers, Pop2PianoForConditionalGeneration, Pop2PianoProcessor
+   - Removed: CVE-2025-32434 workaround for torch.load
+   - Removed: GPU/CPU fallback logic (Basic Pitch handles this internally)
+3. **Added Basic Pitch dependencies**:
+   - Added: `from basic_pitch.inference import predict`
+   - Added: `from basic_pitch import ICASSP_2022_MODEL_PATH`
+4. **Kept scipy compatibility fix** (gaussian, hann, etc.)
+5. **Simplified model loading**: Basic Pitch handles model loading internally, just store path
+
+### API Difference
+| Aspect | Pop2Piano (old) | Basic Pitch (new) |
+|--------|-----------------|-------------------|
+| Import | from transformers import Pop2Piano... | from basic_pitch import ... |
+| Model loading | Pop2PianoForConditionalGeneration.from_pretrained() | Built-in ICASSP_2022_MODEL_PATH |
+| Inference | model.generate() + processor.batch_decode() | predict(audio_path, model_path) |
+| Output | Processor gives MIDI | Returns (model_output, midi_data, note_events) |
+| GPU handling | Manual (.to(device), OOM fallback) | Automatic (TensorFlow) |
+
+### Verification Results (song_01)
+- **Note count**: 1,164 notes (polyphonic transcription)
+- **Duration**: 194.63 seconds
+- **Processing time**: 11.0 seconds
+- **Test passed**: SUCCESS
+
+### Key Implementation Details
+1. **Function signature preserved**: `convert_audio_to_midi(audio_path: Path, output_path: Path) -> Dict[str, Any]`
+2. **Return value preserved**: `{"midi_path", "note_count", "duration_seconds", "processing_time"}`
+3. **Duration calculation**: Using `librosa.get_duration(path=audio_path)` instead of computing from audio array
+4. **Note counting**: Counting directly from `midi_data.instruments` (already a PrettyMIDI object)
+
+### Files Modified
+- `backend/core/audio_to_midi.py` (139 lines, down from 198)
+- `backend/core/audio_to_midi_pop2piano.py.bak` (backup created)
+
+### Warnings Observed (benign)
+- CoreML, TFLite, ONNX not installed warnings (using default TensorFlow backend)
+- TensorFlow oneDNN notice (expected)
+- pkg_resources deprecation in resampy (external library, not our code)
+
+### Next Steps
+- Skyline algorithm will be applied AFTER this function (in melody_extractor.py)
+- This function outputs raw polyphonic MIDI (1,164 notes)
+- Melody extraction step will reduce to ~488 notes

@@ -421,7 +421,7 @@ Phase 3: 정리 + 검증 (Day 9-10)
 
 ### Phase 2: 선택 모델 통합 (Day 6-8)
 
-- [ ] 6. 선택된 모델 통합
+- [x] 6. 선택된 모델 통합 (Basic Pitch integrated, 1,164 notes, 11s)
 
   **What to do**:
   - 기존 `audio_to_midi.py`를 `audio_to_midi_pop2piano.py.bak`으로 백업
