@@ -21,6 +21,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "midi: MIDI comparison test - validates against reference MIDI"
     )
+    config.addinivalue_line(
+        "markers", "essentia: Essentia standalone melody extraction evaluation"
+    )
 
 
 @pytest.fixture(scope="session")

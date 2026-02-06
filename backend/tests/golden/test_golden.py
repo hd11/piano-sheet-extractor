@@ -879,3 +879,104 @@ class TestCompositeMetrics:
                 f"{r['note_counts']['gen']:>6}"
             )
         print(f"{'=' * 80}")
+
+
+@pytest.mark.golden
+@pytest.mark.essentia
+class TestEssentiaNoteF1:
+    """Golden Test - Essentia Standalone: Note F1 evaluation (mir_eval, 50ms onset)"""
+
+    SONG_IDS = [
+        "song_01",
+        "song_02",
+        "song_03",
+        "song_04",
+        "song_05",
+        "song_06",
+        "song_07",
+        "song_08",
+    ]
+
+    NOTE_F1_THRESHOLD = 0.70  # 70% target
+
+    @pytest.mark.parametrize("song_id", SONG_IDS, ids=lambda s: s)
+    def test_essentia_note_f1(self, song_id, golden_data_dir):
+        """
+        Evaluate Essentia standalone melody extraction via mir_eval Note F1.
+
+        - Essentia PredominantPitchMelodia -> note list
+        - Reference: reference.mid
+        - Metric: mir_eval Note F1 (50ms onset, 50 cents pitch)
+        - Threshold: 70% per song
+        """
+        from scripts.essentia_melody_extractor import extract_melody
+        from core.midi_parser import parse_midi
+        from core.comparison_utils import NoteEvent, compute_mir_eval_metrics
+
+        song_path = golden_data_dir / song_id
+        input_mp3 = song_path / "input.mp3"
+        reference_mid = song_path / "reference.mid"
+
+        assert input_mp3.exists(), f"Input MP3 not found: {input_mp3}"
+        assert reference_mid.exists(), f"Reference MIDI not found: {reference_mid}"
+
+        print(f"\n{'=' * 60}")
+        print(f"Essentia Note F1: {song_id}")
+        print(f"{'=' * 60}")
+
+        start_time = time.time()
+
+        # Step 1: Run Essentia melody extraction
+        print("Step 1: Running Essentia melody extraction...")
+        try:
+            essentia_notes = extract_melody(str(input_mp3))
+        except Exception as e:
+            essentia_notes = []
+            print(f"  Essentia FAILED: {e}")
+        print(f"  Essentia extracted: {len(essentia_notes)} notes")
+
+        # Step 2: Load reference MIDI
+        print("Step 2: Loading reference MIDI...")
+        ref_notes = parse_midi(reference_mid)
+        print(f"  Reference notes: {len(ref_notes)}")
+
+        # Step 3: Convert to NoteEvent
+        ref_events = [
+            NoteEvent(pitch=n.pitch, onset=n.onset, offset=n.onset + n.duration)
+            for n in ref_notes
+        ]
+        gen_events = [
+            NoteEvent(
+                pitch=n["pitch"],
+                onset=n["onset"],
+                offset=n["onset"] + n["duration"],
+            )
+            for n in essentia_notes
+        ]
+
+        # Step 4: Compute mir_eval metrics
+        if len(gen_events) == 0:
+            metrics = {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+        else:
+            print("Step 3: Computing mir_eval metrics (50ms onset, 50 cents pitch)...")
+            metrics = compute_mir_eval_metrics(
+                ref_events,
+                gen_events,
+                onset_tolerance=0.05,
+                pitch_tolerance=50.0,
+            )
+
+        elapsed = time.time() - start_time
+
+        # Print results
+        note_f1 = metrics["f1"]
+        print(f"\n  Note F1 = {note_f1:.4f} ({note_f1 * 100:.2f}%)")
+        print(f"  Precision = {metrics['precision']:.4f}")
+        print(f"  Recall = {metrics['recall']:.4f}")
+        print(f"  Ref notes: {len(ref_events)}, Gen notes: {len(gen_events)}")
+        print(f"  Time: {elapsed:.2f}s")
+
+        # Assert threshold
+        assert note_f1 >= self.NOTE_F1_THRESHOLD, (
+            f"{song_id}: Note F1 = {note_f1:.2%} below threshold {self.NOTE_F1_THRESHOLD:.0%}"
+        )
