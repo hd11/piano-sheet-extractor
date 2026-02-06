@@ -99,9 +99,9 @@ CRITICAL 모듈 테스트 작성 → 안전한 리팩토링 → 멜로디 추출
 
 ### Definition of Done
 - [x] midi_parser.py, job_manager.py 테스트 추가 (36 tests)
-- [ ] 모든 golden test 통과 (pending Docker)
+- [⏳] 모든 golden test 통과 (BLOCKED: Docker/Python unavailable - see blockers.md)
 - [x] musicxml_comparator.py 400줄 이하 (348 lines)
-- [ ] 멜로디 F1 15% 이상 (pending measurement)
+- [⏳] 멜로디 F1 15% 이상 (BLOCKED: measurement requires Docker - see blockers.md)
 
 ### Must Have
 - 리팩토링 전 CRITICAL 모듈 테스트
@@ -681,7 +681,7 @@ python -c "from core.job_manager import process_job_async; print('OK')"
 
 ### Final Checklist
 - [x] midi_parser, job_manager 테스트 추가됨
-- [ ] 모든 golden test 통과 (pending Docker execution)
+- [⏳] 모든 golden test 통과 (BLOCKED: requires Docker - see blockers.md)
 - [x] musicxml_comparator.py < 400줄 (348 lines)
-- [ ] 멜로디 F1 >= 15% (pending measurement in Docker)
+- [⏳] 멜로디 F1 >= 15% (BLOCKED: requires Docker - see blockers.md)
 - [x] 기존 import 경로 유지됨
