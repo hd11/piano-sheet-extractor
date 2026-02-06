@@ -139,7 +139,7 @@ Task 3: 최종 결과 보고
 
 ## TODOs
 
-- [ ] 1. 기준선 측정: Essentia Note F1 (50ms) 실제 수치 측정
+- [x] 1. 기준선 측정: Essentia Note F1 (50ms) 실제 수치 측정 — avg 0.49%, max 1.03%
 
   **What to do**:
   - WSL에서 Essentia로 8곡 멜로디 추출
@@ -242,7 +242,7 @@ Task 3: 최종 결과 보고
 
 ---
 
-- [ ] 2. TestEssentiaNoteF1 클래스 구현
+- [x] 2. TestEssentiaNoteF1 클래스 구현
 
   **What to do**:
   - `backend/tests/golden/test_golden.py`에 `TestEssentiaNoteF1` 클래스 추가
@@ -330,7 +330,7 @@ Task 3: 최종 결과 보고
 
 ---
 
-- [ ] 3. 최종 결과 보고
+- [x] 3. 최종 결과 보고
 
   **What to do**:
   - 기준선 측정 결과 + 테스트 결과 종합
