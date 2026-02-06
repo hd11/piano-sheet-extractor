@@ -17,7 +17,7 @@ import json
 
 # Import core modules
 from core.audio_to_midi import convert_audio_to_midi
-from core.melody_extractor import extract_melody
+from core.melody_extractor import extract_melody, extract_melody_with_audio
 from core.midi_parser import parse_midi
 from core.audio_analysis import analyze_audio
 from core.difficulty_adjuster import generate_all_sheets
@@ -361,9 +361,9 @@ class TestMelodyComparison:
             assert result["note_count"] > 0, "No notes detected in MIDI"
             print(f"  ✓ MIDI created: {result['note_count']} notes")
 
-            # Extract melody from generated MIDI
+            # Extract melody from generated MIDI (using audio-based Essentia)
             print("Step 3: Extracting generated melody...")
-            gen_melody = extract_melody(raw_midi_path)
+            gen_melody = extract_melody_with_audio(input_mp3, raw_midi_path)
             assert len(gen_melody) > 0, "No generated melody notes extracted"
             print(f"  ✓ Generated melody: {len(gen_melody)} notes")
 
