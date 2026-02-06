@@ -1,0 +1,559 @@
+C:\Users\handuk.lee\projects\mk-pinano-sheet\backend\.venv\Lib\site-packages\pretty_midi\pretty_midi.py:122: RuntimeWarning: Tempo, Key or Time signature change events found on non-zero tracks.  This is not a valid type 0 or type 1 MIDI file.  Tempo, Key or Time Signature may be wrong.
+  warnings.warn(
+C:\Users\handuk.lee\projects\mk-pinano-sheet\backend\.venv\Lib\site-packages\music21\musicxml\xmlToM21.py:5312: MusicXMLWarning: Could not import octave-shift: Error in getting Ottava
+  warnings.warn(f'Could not import {tag}: {excep}', MusicXMLWarning)
+
+================================================================================
+TESTING ALL 8 SONGS
+================================================================================
+
+
+################################################################################
+# Testing song_01
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 584
+  Pitch range: 62-84
+  Avg duration: 425.9ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 185
+  Pitch range: 54-83
+  Avg duration: 467.7ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 527
+  Pitch range: 48-84
+  Avg duration: 294.1ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 584 notes
+Essentia: 185 notes
+Skyline: 527 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 17.98%
+
+Skyline vs Reference:
+  Pitch class similarity: 42.98%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 584 notes
+Essentia: 185 notes (17.98% similarity)
+Skyline: 527 notes (42.98% similarity)
+
+[+] Skyline performs better (+25.00%)
+
+============================================================
+
+
+################################################################################
+# Testing song_02
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 513
+  Pitch range: 55-84
+  Avg duration: 220.7ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 79
+  Pitch range: 46-79
+  Avg duration: 223.2ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 612
+  Pitch range: 49-84
+  Avg duration: 196.2ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 513 notes
+Essentia: 79 notes
+Skyline: 612 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 12.09%
+
+Skyline vs Reference:
+  Pitch class similarity: 82.35%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 513 notes
+Essentia: 79 notes (12.09% similarity)
+Skyline: 612 notes (82.35% similarity)
+
+[+] Skyline performs better (+70.27%)
+
+============================================================
+
+
+################################################################################
+# Testing song_03
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 374
+  Pitch range: 68-83
+  Avg duration: 329.8ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 207
+  Pitch range: 42-73
+  Avg duration: 467.4ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 405
+  Pitch range: 50-83
+  Avg duration: 348.8ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 374 notes
+Essentia: 207 notes
+Skyline: 405 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 47.86%
+
+Skyline vs Reference:
+  Pitch class similarity: 89.63%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 374 notes
+Essentia: 207 notes (47.86% similarity)
+Skyline: 405 notes (89.63% similarity)
+
+[+] Skyline performs better (+41.77%)
+
+============================================================
+
+
+################################################################################
+# Testing song_04
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 435
+  Pitch range: 72-84
+  Avg duration: 294.1ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 276
+  Pitch range: 41-72
+  Avg duration: 316.0ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 512
+  Pitch range: 51-84
+  Avg duration: 296.3ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 435 notes
+Essentia: 276 notes
+Skyline: 512 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 52.18%
+
+Skyline vs Reference:
+  Pitch class similarity: 83.20%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 435 notes
+Essentia: 276 notes (52.18% similarity)
+Skyline: 512 notes (83.20% similarity)
+
+[+] Skyline performs better (+31.02%)
+
+============================================================
+
+
+################################################################################
+# Testing song_05
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 607
+  Pitch range: 60-80
+  Avg duration: 359.8ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 145
+  Pitch range: 49-67
+  Avg duration: 770.8ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 693
+  Pitch range: 48-80
+  Avg duration: 330.3ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 607 notes
+Essentia: 145 notes
+Skyline: 693 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 20.43%
+
+Skyline vs Reference:
+  Pitch class similarity: 79.37%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 607 notes
+Essentia: 145 notes (20.43% similarity)
+Skyline: 693 notes (79.37% similarity)
+
+[+] Skyline performs better (+58.94%)
+
+============================================================
+
+
+################################################################################
+# Testing song_06
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 579
+  Pitch range: 63-82
+  Avg duration: 317.6ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 238
+  Pitch range: 41-73
+  Avg duration: 587.3ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 686
+  Pitch range: 48-82
+  Avg duration: 279.2ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 579 notes
+Essentia: 238 notes
+Skyline: 686 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 34.37%
+
+Skyline vs Reference:
+  Pitch class similarity: 81.34%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 579 notes
+Essentia: 238 notes (34.37% similarity)
+Skyline: 686 notes (81.34% similarity)
+
+[+] Skyline performs better (+46.97%)
+
+============================================================
+
+
+################################################################################
+# Testing song_07
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 296
+  Pitch range: 53-77
+  Avg duration: 316.0ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 112
+  Pitch range: 41-70
+  Avg duration: 356.3ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 619
+  Pitch range: 49-77
+  Avg duration: 306.1ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 296 notes
+Essentia: 112 notes
+Skyline: 619 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 17.57%
+
+Skyline vs Reference:
+  Pitch class similarity: 37.64%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 296 notes
+Essentia: 112 notes (17.57% similarity)
+Skyline: 619 notes (37.64% similarity)
+
+[+] Skyline performs better (+20.07%)
+
+============================================================
+
+
+################################################################################
+# Testing song_08
+################################################################################
+
+
+============================================================
+Reference MusicXML: reference.mxl
+============================================================
+
+Reference stats:
+  Notes: 411
+  Pitch range: 57-83
+  Avg duration: 294.4ms
+
+============================================================
+Testing Essentia on: input.mp3
+============================================================
+
+Step 1: Running Essentia melody extractor (via WSL)...
+[OK] Essentia extraction completed
+
+Essentia stats:
+  Notes: 222
+  Pitch range: 52-80
+  Avg duration: 456.0ms
+
+============================================================
+Testing Skyline on: input.mp3
+============================================================
+
+Step 1: Running Basic Pitch + Skyline pipeline...
+[OK] Skyline extraction completed
+
+Skyline stats:
+  Notes: 497
+  Pitch range: 49-83
+  Avg duration: 304.5ms
+
+============================================================
+COMPARISON
+============================================================
+
+Reference: 411 notes
+Essentia: 222 notes
+Skyline: 497 notes
+
+Essentia vs Reference:
+  Pitch class similarity: 44.77%
+
+Skyline vs Reference:
+  Pitch class similarity: 80.28%
+
+============================================================
+SUMMARY
+============================================================
+
+Reference: 411 notes
+Essentia: 222 notes (44.77% similarity)
+Skyline: 497 notes (80.28% similarity)
+
+[+] Skyline performs better (+35.51%)
+
+============================================================
+
+
+================================================================================
+RESULTS TABLE
+================================================================================
+
+| Song    | Skyline | Essentia | Improved |
+|---------|---------|----------|----------|
+| song_01 | 42.98% |  17.98% |          |
+| song_02 | 82.35% |  12.09% |          |
+| song_03 | 89.63% |  47.86% |          |
+| song_04 | 83.20% |  52.18% |          |
+| song_05 | 79.37% |  20.43% |          |
+| song_06 | 81.34% |  34.37% |          |
+| song_07 | 37.64% |  17.57% |          |
+| song_08 | 80.28% |  44.77% |          |
+|---------|---------|----------|----------|
+| SUMMARY | 72.10% |  30.91% | 0/8 improved |
+
+================================================================================
+ANALYSIS
+================================================================================
+
+Average Skyline similarity: 72.10%
+Average Essentia similarity: 30.91%
+Songs improved with Essentia: 0/8 (0.0%)
+
+[+] Skyline performs better overall (+41.19%)
+
+================================================================================
+

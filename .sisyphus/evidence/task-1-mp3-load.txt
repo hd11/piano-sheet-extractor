@@ -1,0 +1,3 @@
+SUCCESS: MP3 loaded with Essentia MonoLoader
+Audio shape: (8583168,)
+Audio duration: 194.63 seconds

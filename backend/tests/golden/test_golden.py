@@ -361,9 +361,9 @@ class TestMelodyComparison:
             assert result["note_count"] > 0, "No notes detected in MIDI"
             print(f"  ✓ MIDI created: {result['note_count']} notes")
 
-            # Extract melody from generated MIDI (using audio-based Essentia)
+            # Extract melody from generated MIDI (using Hybrid Scoring)
             print("Step 3: Extracting generated melody...")
-            gen_melody = extract_melody_with_audio(input_mp3, raw_midi_path)
+            gen_melody = extract_melody(raw_midi_path)
             assert len(gen_melody) > 0, "No generated melody notes extracted"
             print(f"  ✓ Generated melody: {len(gen_melody)} notes")
 
