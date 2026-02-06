@@ -174,3 +174,27 @@
 - No runtime errors when importing modules
 - Syntax validation passed for both files
 - Type checking errors reduced to only missing library stubs (expected)
+
+## [2026-02-06] Task 4: Split musicxml_comparator
+
+### Files Created
+- musicxml_parser.py — MusicXML parsing logic (199 lines)
+
+### Changes Made
+- musicxml_comparator.py: Removed parsing, added imports (reduced from 508 to 348 lines)
+- Parsing functions moved: parse_musicxml, extract_notes, extract_metadata, noteinfos_to_noteevents
+- Data classes moved: ScoreMetadata
+- New exception: ParsingError (in musicxml_parser.py)
+- Imports aliased with underscore prefix to maintain internal naming convention
+
+### Verification
+- Line count: 348 lines (< 400 PASS)
+- No duplicate code: YES (0 parsing function defs in comparator)
+- No external imports of musicxml_comparator found (all usage is internal)
+- Public API preserved: compare_musicxml, compare_musicxml_composite, ComparisonError
+
+### Key Decisions
+- Removed leading underscores from function names in parser (public module API)
+- Re-aliased with underscores in comparator imports to minimize code changes
+- Kept ComparisonError in comparator, added ParsingError in parser
+- No __init__.py changes needed (no external imports of parsing functions)
