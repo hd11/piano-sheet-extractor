@@ -24,7 +24,7 @@ from pathlib import Path
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.melody_extractor import extract_melody
+from core.vocal_melody_extractor import extract_melody
 from core.musicxml_writer import save_musicxml
 
 # Configure logging

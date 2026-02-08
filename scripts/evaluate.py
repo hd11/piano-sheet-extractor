@@ -17,7 +17,7 @@ import time
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.melody_extractor import extract_melody
+from core.vocal_melody_extractor import extract_melody
 from core.reference_extractor import extract_reference_melody
 from core.comparator import compare_melodies
 
@@ -57,8 +57,9 @@ def evaluate_all_songs(input_dir: Path, output_path: Path):
         start_time = time.time()
 
         try:
-            # Extract melody via custom pipeline
-            gen_notes = extract_melody(mp3_path)
+            # Extract melody via custom pipeline with caching
+            cache_dir = input_dir / "cache"
+            gen_notes = extract_melody(mp3_path, cache_dir=cache_dir)
 
             # Extract reference melody and filter zero-duration notes
             # (some .mxl files produce notes with duration=0 which mir_eval rejects)
