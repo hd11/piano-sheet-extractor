@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""
+Evaluate custom melody extraction pipeline on all test songs.
+
+Processes all .mp3 files in input directory using the custom Melodia-style
+pipeline (core.melody_extractor), compares with reference .mxl files via
+core.comparator, and outputs evaluation metrics as JSON + console table.
+"""
+
+import sys
+from pathlib import Path
+import argparse
+import glob
+import json
+import time
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from core.melody_extractor import extract_melody
+from core.reference_extractor import extract_reference_melody
+from core.comparator import compare_melodies
+
+
+def evaluate_all_songs(input_dir: Path, output_path: Path):
+    """Evaluate custom melody extraction on all songs in input directory."""
+
+    # Find all MP3 files
+    mp3_files = sorted(glob.glob(str(input_dir / "*.mp3")))
+
+    if not mp3_files:
+        print(f"No MP3 files found in {input_dir}")
+        return
+
+    print(f"Found {len(mp3_files)} songs to evaluate\n")
+
+    results = {
+        "summary": {
+            "total_songs": 0,
+            "avg_pitch_class_f1": 0.0,
+            "avg_chroma_similarity": 0.0,
+        },
+        "songs": {},
+    }
+
+    # Process each song
+    for mp3_path in mp3_files:
+        mp3_path = Path(mp3_path)
+        stem = mp3_path.stem
+        mxl_path = input_dir / f"{stem}.mxl"
+
+        if not mxl_path.exists():
+            print(f"  Skipping {stem}: No matching .mxl file")
+            continue
+
+        print(f"Processing: {stem}")
+        start_time = time.time()
+
+        try:
+            # Extract melody via custom pipeline
+            gen_notes = extract_melody(mp3_path)
+
+            # Extract reference melody and filter zero-duration notes
+            # (some .mxl files produce notes with duration=0 which mir_eval rejects)
+            ref_notes = [
+                n for n in extract_reference_melody(mxl_path) if n.duration > 0
+            ]
+            gen_notes = [n for n in gen_notes if n.duration > 0]
+
+            # Compare
+            metrics = compare_melodies(ref_notes, gen_notes)
+
+            processing_time = time.time() - start_time
+
+            # Store results
+            results["songs"][stem] = {
+                **metrics,
+                "processing_time": round(processing_time, 1),
+            }
+
+            print(
+                f"  [OK] pitch_class_f1: {metrics['pitch_class_f1']:.3f}, "
+                f"chroma: {metrics['chroma_similarity']:.3f}, "
+                f"notes: {metrics['note_counts']['gen']}/{metrics['note_counts']['ref']}, "
+                f"time: {processing_time:.1f}s\n"
+            )
+
+        except Exception as e:
+            print(f"  [ERROR] {e}\n")
+            import traceback
+
+            traceback.print_exc()
+            continue
+
+    # Calculate summary
+    if results["songs"]:
+        results["summary"]["total_songs"] = len(results["songs"])
+        results["summary"]["avg_pitch_class_f1"] = sum(
+            s["pitch_class_f1"] for s in results["songs"].values()
+        ) / len(results["songs"])
+        results["summary"]["avg_chroma_similarity"] = sum(
+            s["chroma_similarity"] for s in results["songs"].values()
+        ) / len(results["songs"])
+
+    # Save JSON
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    print(f"\n{'=' * 80}")
+    print("EVALUATION COMPLETE")
+    print(f"{'=' * 80}\n")
+
+    # Print table
+    print(
+        f"{'Song':<30} | {'pc_f1':<6} | {'chroma':<6} | {'ref_notes':<9} | {'gen_notes':<9} | {'time':<6}"
+    )
+    print(f"{'-' * 80}")
+
+    for stem, metrics in results["songs"].items():
+        print(
+            f"{stem:<30} | {metrics['pitch_class_f1']:<6.3f} | "
+            f"{metrics['chroma_similarity']:<6.3f} | "
+            f"{metrics['note_counts']['ref']:<9} | "
+            f"{metrics['note_counts']['gen']:<9} | "
+            f"{metrics['processing_time']:<6.1f}s"
+        )
+
+    print(f"{'-' * 80}")
+    print(
+        f"{'AVERAGE':<30} | {results['summary']['avg_pitch_class_f1']:<6.3f} | "
+        f"{results['summary']['avg_chroma_similarity']:<6.3f} | "
+        f"{'':>9} | {'':>9} |"
+    )
+
+    print(f"\nResults saved to: {output_path}")
+    print(f"Total songs evaluated: {results['summary']['total_songs']}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Evaluate custom melody extraction pipeline on all test songs"
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=Path("test"),
+        help="Directory containing .mp3 and .mxl files (default: test)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("results/custom_v1.json"),
+        help="Output JSON file (default: results/custom_v1.json)",
+    )
+
+    args = parser.parse_args()
+
+    evaluate_all_songs(args.input_dir, args.output)
+
+
+if __name__ == "__main__":
+    main()
