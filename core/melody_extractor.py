@@ -66,7 +66,7 @@ MIN_DURATION_SEC = 0.04  # 40ms minimum note
 
 # ── Cache ────────────────────────────────────────────────────────────────────
 DEFAULT_CACHE_DIR = Path("test/cache")
-SALIENCE_CACHE_VERSION = "v16"
+SALIENCE_CACHE_VERSION = "v27"
 
 
 def _suppress_subharmonics(salience: np.ndarray) -> np.ndarray:
@@ -152,7 +152,6 @@ def compute_salience_map(
     S = librosa.stft(y, hop_length=HOP_LENGTH)
     S_harm, _ = librosa.decompose.hpss(S, margin=1.5)
     y_harm = librosa.istft(S_harm, hop_length=HOP_LENGTH)
-    logger.info("HPSS complete: harmonic signal length=%d", len(y_harm))
 
     # 2. CQT spectrogram (on harmonic component)
     logger.info(
@@ -172,7 +171,7 @@ def compute_salience_map(
             fmin=FMIN,
         )
     )
-    logger.info("CQT shape: %s (from harmonic HPSS)", C.shape)
+    logger.info("CQT shape: %s (harmonic HPSS)", C.shape)
 
     # Frequency and time arrays
     freqs = librosa.cqt_frequencies(
@@ -281,7 +280,9 @@ def detect_peaks(
             all_peaks.append([])
             continue
 
-        # Build (frequency_hz, normalized_strength) tuples, sorted by strength desc
+        # Build (frequency_hz, normalized_strength) tuples
+        # Sort by frequency descending (prefer higher pitches = more likely vocal)
+        # but only include peaks with reasonable strength
         frame_peaks: list[tuple[float, float]] = []
         for idx in peak_indices:
             freq_hz = float(freqs[idx])
@@ -291,7 +292,26 @@ def detect_peaks(
                     continue
             strength = float(frame[idx]) / (frame_max + SALIENCE_EPS)
             frame_peaks.append((freq_hz, strength))
-        frame_peaks.sort(key=lambda x: x[1], reverse=True)
+
+        # Score each peak: combine strength with height preference
+        # Higher pitches get a boost (vocal tendency)
+        if frame_peaks:
+            scored_peaks: list[tuple[float, float, float]] = []
+            for freq_hz, strength in frame_peaks:
+                midi = 12.0 * math.log2(freq_hz / 440.0) + 69.0
+                # Height score: linearly interpolate 0.5 (at MIDI_LOW) to 1.5 (at MIDI_HIGH)
+                if VOCAL_MIDI_LOW <= midi <= VOCAL_MIDI_HIGH:
+                    height_score = 0.5 + 1.0 * (midi - VOCAL_MIDI_LOW) / max(
+                        VOCAL_MIDI_HIGH - VOCAL_MIDI_LOW, 1
+                    )
+                else:
+                    height_score = 0.3
+                combined = strength * height_score
+                scored_peaks.append((freq_hz, strength, combined))
+            # Sort by combined score descending
+            scored_peaks.sort(key=lambda x: x[2], reverse=True)
+            frame_peaks = [(f, s) for f, s, _ in scored_peaks]
+
         all_peaks.append(frame_peaks)
 
     frames_with = sum(1 for p in all_peaks if p)
@@ -662,6 +682,61 @@ def segment_notes(melody_f0: np.ndarray) -> list[Note]:
     return notes
 
 
+def _correct_octave_errors(notes: list[Note]) -> list[Note]:
+    """Post-processing: correct octave errors by pulling outliers toward median.
+
+    If a note is more than 9 semitones away from the local median pitch
+    (computed over a window of surrounding notes), shift it by octaves
+    until it's closest to the median. This fixes common ±12 semitone errors.
+
+    Args:
+        notes: List of Note objects from segment_notes().
+
+    Returns:
+        New list of Note objects with octave-corrected pitches.
+    """
+    if len(notes) < 5:
+        return notes
+
+    pitches = np.array([n.pitch for n in notes])
+    corrected = pitches.copy()
+    window = 15  # Look at ±15 surrounding notes for context
+
+    corrections = 0
+    for i in range(len(pitches)):
+        # Local context window
+        lo = max(0, i - window)
+        hi = min(len(pitches), i + window + 1)
+        local_median = float(np.median(pitches[lo:hi]))
+
+        # If note is far from local median, try octave shifts only
+        if abs(pitches[i] - local_median) > 7:
+            best_pitch = pitches[i]
+            best_dist = abs(pitches[i] - local_median)
+            for shift in [-24, -12, 12, 24]:
+                candidate = pitches[i] + shift
+                dist = abs(candidate - local_median)
+                if dist < best_dist and VOCAL_MIDI_LOW <= candidate <= VOCAL_MIDI_HIGH:
+                    best_dist = dist
+                    best_pitch = candidate
+            if best_pitch != pitches[i]:
+                corrected[i] = best_pitch
+                corrections += 1
+
+    if corrections > 0:
+        logger.info(
+            "Octave correction: %d/%d notes corrected (%.1f%%)",
+            corrections,
+            len(notes),
+            100.0 * corrections / len(notes),
+        )
+
+    return [
+        Note(pitch=int(corrected[i]), onset=n.onset, duration=n.duration)
+        for i, n in enumerate(notes)
+    ]
+
+
 def extract_melody(mp3_path: Path, cache_dir: Path = DEFAULT_CACHE_DIR) -> list[Note]:
     """End-to-end melody extraction from an MP3 file.
 
@@ -684,6 +759,7 @@ def extract_melody(mp3_path: Path, cache_dir: Path = DEFAULT_CACHE_DIR) -> list[
     melody_f0 = select_melody(contours)
     melody_f0 = smooth_melody(melody_f0)
     notes = segment_notes(melody_f0)
+    notes = _correct_octave_errors(notes)
 
     logger.info("extract_melody: pipeline complete, %d notes", len(notes))
     return notes
