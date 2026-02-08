@@ -11,3 +11,9 @@ results/
 output/
 .sisyphus/
 .sisyphusnotepad*
+
+# Logs
+*.log
+eval_output.txt
+eval_run.log
+NUL
