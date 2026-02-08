@@ -2,13 +2,13 @@
 
 from .types import Note
 from .reference_extractor import extract_reference_melody
-from .vocal_separator import separate_vocals
+from .melody_extractor import extract_melody
 from .musicxml_writer import notes_to_musicxml, save_musicxml
 
 __all__ = [
     "Note",
     "extract_reference_melody",
-    "separate_vocals",
+    "extract_melody",
     "notes_to_musicxml",
     "save_musicxml",
 ]

@@ -126,7 +126,7 @@ def compute_salience_map(
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    # MD5-based cache key (same pattern as vocal_separator.py)
+    # MD5-based cache key
     file_bytes = mp3_path.read_bytes()
     md5_hash = hashlib.md5(file_bytes).hexdigest()
     cached_path = cache_dir / f"{md5_hash}_salience_{SALIENCE_CACHE_VERSION}.npz"
@@ -569,8 +569,7 @@ def segment_notes(melody_f0: np.ndarray) -> list[Note]:
     """Convert a continuous F0 array into discrete Note objects.
 
     Groups consecutive frames with the same MIDI pitch, bridges short gaps,
-    and filters out very short notes. Follows the same pattern as
-    ``core.pitch_extractor._segment_notes``.
+    and filters out very short notes.
 
     Args:
         melody_f0: Per-frame F0 in Hz. Unvoiced frames are 0.0.
