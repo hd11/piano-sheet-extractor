@@ -8,7 +8,7 @@ Parameters tuned for polyphonic pop music with prominent vocal melody:
 - Salience: first 4 harmonics with stronger fundamental bias
 - Peaks: prominence-based filtering per frame via scipy.signal.find_peaks
 - Contours: greedy nearest-neighbor linking within one semitone
-- Melody: contour scoring with vocal range prior (G3-G#5)
+- Melody: contour scoring with vocal range prior (A#3-F5)
 """
 
 import hashlib
@@ -34,12 +34,14 @@ FMIN = float(librosa.note_to_hz("C1"))  # ~32.7 Hz, lowest CQT bin
 # ── Harmonic Salience parameters ─────────────────────────────────────────────
 HARMONICS = [1, 2, 3, 4]  # Fundamental + 3 overtones
 WEIGHTS = [1.0, 0.4, 0.25, 0.15]  # Stronger bias toward fundamentals
+SUBHARMONIC_SUPPRESSION = 1.2  # Strong attenuation for lower-octave dominance
+SUBHARMONIC_OCTAVES = (1, 2)  # Octave offsets to suppress (1=12 bins)
 
 # ── Peak Detection parameters ────────────────────────────────────────────────
 PEAK_PROMINENCE = 0.05  # Absolute floor for prominence
 PEAK_RELATIVE_PROMINENCE = 0.2  # Relative to frame max (0-1)
 PEAK_DISTANCE = 2  # Minimum bin distance between peaks (~quarter tone)
-HARD_VOCAL_RANGE = False  # Drop peaks outside vocal MIDI range
+HARD_VOCAL_RANGE = True  # Drop peaks outside vocal MIDI range
 VOCAL_DOMINANCE_THRESHOLD = 0.6  # Require out-of-range suppression when vocal dominates
 SALIENCE_EPS = 1e-8  # Numerical stability for normalization
 
@@ -49,13 +51,13 @@ MAX_FREQ_RATIO = SEMITONE_RATIO  # max frequency jump between adjacent frames
 MIN_CONTOUR_FRAMES = 8  # minimum contour length (~185ms)
 
 # ── Melody Selection parameters ──────────────────────────────────────────────
-VOCAL_MIDI_LOW = 55  # G3
-VOCAL_MIDI_HIGH = 80  # G#5
+VOCAL_MIDI_LOW = 62  # D4 (K-pop vocal low end)
+VOCAL_MIDI_HIGH = 86  # D6 (K-pop vocal high end, incl. falsetto)
 VOCAL_RANGE_BONUS = 3.0  # score multiplier for vocal range
-VOCAL_RANGE_PENALTY = 0.5  # penalty for out-of-range contours
+VOCAL_RANGE_PENALTY = 0.3  # stronger penalty for out-of-range contours
 
 # ── Viterbi Smoothing parameters ─────────────────────────────────────────────
-VITERBI_SELF_TRANSITION = 0.92  # Self-transition probability for Viterbi
+VITERBI_SELF_TRANSITION = 0.85  # Lower self-transition allows more pitch changes
 MIDI_RANGE = (21, 108)  # A0 to C8
 
 # ── Note Segmentation parameters ─────────────────────────────────────────────
@@ -64,7 +66,34 @@ MIN_DURATION_SEC = 0.04  # 40ms minimum note
 
 # ── Cache ────────────────────────────────────────────────────────────────────
 DEFAULT_CACHE_DIR = Path("test/cache")
-SALIENCE_CACHE_VERSION = "v4"
+SALIENCE_CACHE_VERSION = "v16"
+
+
+def _suppress_subharmonics(salience: np.ndarray) -> np.ndarray:
+    """Suppress lower-octave bins when higher octave energy dominates."""
+    if SUBHARMONIC_SUPPRESSION <= 0:
+        return salience
+
+    n_bins = salience.shape[0]
+    suppression = np.zeros_like(salience)
+    for octave in SUBHARMONIC_OCTAVES:
+        shift = int(octave * BINS_PER_OCTAVE)
+        if shift <= 0 or shift >= n_bins:
+            continue
+        suppression[:-shift, :] = np.maximum(
+            suppression[:-shift, :], salience[shift:, :]
+        )
+
+    ratio = suppression / (salience + SALIENCE_EPS)
+    attenuation = 1.0 / (1.0 + SUBHARMONIC_SUPPRESSION * ratio)
+    suppressed = salience * attenuation
+
+    logger.info(
+        "Subharmonic suppression: factor=%.2f, octaves=%s",
+        SUBHARMONIC_SUPPRESSION,
+        SUBHARMONIC_OCTAVES,
+    )
+    return suppressed
 
 
 def compute_salience_map(
@@ -118,7 +147,14 @@ def compute_salience_map(
     duration = len(y) / sr
     logger.info("Audio loaded: %.1fs, %d samples", duration, len(y))
 
-    # 2. CQT spectrogram
+    # 1.5 HPSS: extract harmonic component to reduce percussive interference
+    logger.info("Applying HPSS to extract harmonic component...")
+    S = librosa.stft(y, hop_length=HOP_LENGTH)
+    S_harm, _ = librosa.decompose.hpss(S, margin=1.5)
+    y_harm = librosa.istft(S_harm, hop_length=HOP_LENGTH)
+    logger.info("HPSS complete: harmonic signal length=%d", len(y_harm))
+
+    # 2. CQT spectrogram (on harmonic component)
     logger.info(
         "Computing CQT: n_bins=%d, bins_per_octave=%d, hop=%d, fmin=%.1f",
         N_BINS,
@@ -128,7 +164,7 @@ def compute_salience_map(
     )
     C = np.abs(
         librosa.cqt(
-            y,
+            y_harm,
             sr=sr,
             hop_length=HOP_LENGTH,
             n_bins=N_BINS,
@@ -136,7 +172,7 @@ def compute_salience_map(
             fmin=FMIN,
         )
     )
-    logger.info("CQT shape: %s", C.shape)
+    logger.info("CQT shape: %s (from harmonic HPSS)", C.shape)
 
     # Frequency and time arrays
     freqs = librosa.cqt_frequencies(
@@ -157,13 +193,33 @@ def compute_salience_map(
     # Replace NaN with 0 (safety)
     salience = np.nan_to_num(salience, nan=0.0)
 
-    # Emphasize vocal range to reduce accompaniment dominance
+    # Suppress subharmonic dominance to favor higher-pitched melody lines
+    salience = _suppress_subharmonics(salience)
+
+    # Emphasize vocal range with pitch-height bias to counter low-pitch dominance
     midi_bins = 12.0 * np.log2(freqs / 440.0) + 69.0
     range_mask = (midi_bins >= VOCAL_MIDI_LOW) & (midi_bins <= VOCAL_MIDI_HIGH)
+
+    # Build per-bin weights:
+    # - Outside vocal range: heavy penalty
+    # - Inside vocal range: linear ramp favoring higher pitches
+    #   (compensates for accompaniment's natural low-frequency dominance)
     range_weights = np.where(range_mask, 1.0, VOCAL_RANGE_PENALTY)
+
+    # Add height bias within vocal range: higher pitches get up to 2x boost
+    vocal_center = (VOCAL_MIDI_LOW + VOCAL_MIDI_HIGH) / 2.0
+    vocal_span = (VOCAL_MIDI_HIGH - VOCAL_MIDI_LOW) / 2.0
+    for i, midi in enumerate(midi_bins):
+        if range_mask[i] and vocal_span > 0:
+            # Linear ramp: 0.4 at low end, 1.6 at high end (aggressive)
+            height_factor = 0.4 + 1.2 * (midi - VOCAL_MIDI_LOW) / (
+                VOCAL_MIDI_HIGH - VOCAL_MIDI_LOW
+            )
+            range_weights[i] *= height_factor
+
     salience = salience * range_weights[:, np.newaxis]
     logger.info(
-        "Salience shape: %s, max=%.4f (vocal bins=%d, penalty=%.2f)",
+        "Salience shape: %s, max=%.4f (vocal bins=%d, penalty=%.2f, height_bias=0.7-1.3)",
         salience.shape,
         salience.max(),
         int(np.sum(range_mask)),
@@ -358,9 +414,9 @@ def select_melody(
 ) -> np.ndarray:
     """Select the most prominent melody contour and build a per-frame F0 array.
 
-    Scores each contour by ``mean_strength * sqrt(duration_frames)``, with a
-    bonus multiplier for contours whose mean frequency falls in the vocal
-    range (MIDI 55-80, G3-G#5) and a penalty for erratic pitch movement.
+    Scores each contour by ``median_strength * sqrt(duration_frames)``, with a
+    bonus multiplier for contours whose median frequency falls in the vocal
+    range (MIDI 58-77, A#3-F5) and a penalty for erratic pitch movement.
     Overlapping contours are resolved by keeping the higher-scoring one per frame.
 
     Args:
@@ -382,14 +438,14 @@ def select_melody(
     scored: list[tuple[float, int]] = []  # (score, contour_index)
     for c_idx, contour in enumerate(contours):
         strengths = [pt[2] for pt in contour]
-        mean_strength = sum(strengths) / len(strengths)
+        median_strength = float(np.median(strengths))
         duration = len(contour)
-        score = mean_strength * math.sqrt(duration)
+        score = median_strength * math.sqrt(duration)
 
         freqs_hz = [pt[1] for pt in contour]
-        mean_freq = sum(freqs_hz) / len(freqs_hz)
-        if mean_freq > 0:
-            midi = 12.0 * math.log2(mean_freq / 440.0) + 69.0
+        median_freq = float(np.median(freqs_hz))
+        if median_freq > 0:
+            midi = 12.0 * math.log2(median_freq / 440.0) + 69.0
             if VOCAL_MIDI_LOW <= midi <= VOCAL_MIDI_HIGH:
                 score *= VOCAL_RANGE_BONUS
             else:
