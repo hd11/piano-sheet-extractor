@@ -58,8 +58,8 @@ def find_optimal_time_offset(
 
     # Fine pass around coarse best
     coarse_best = best_offset
-    for offset_ms in range(int((coarse_best - fine_range_ms / 1000) * 1000),
-                           int((coarse_best + fine_range_ms / 1000) * 1000) + 1,
+    for offset_ms in range(int(round((coarse_best - fine_range_ms / 1000) * 1000)),
+                           int(round((coarse_best + fine_range_ms / 1000) * 1000)) + 1,
                            fine_step_ms):
         offset = offset_ms / 1000.0
         f1 = _eval(offset)

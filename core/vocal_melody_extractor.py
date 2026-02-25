@@ -62,9 +62,9 @@ def extract_melody(
         mp3_path: Path to input MP3 file.
         cache_dir: Directory for cached .npz files. Defaults to None (no caching).
         periodicity_threshold: Minimum periodicity confidence for voiced frames.
-            None uses the default (0.5).
+            None uses the default (0.6).
         min_note_dur: Minimum note duration in seconds.
-            None uses the default (0.06).
+            None uses the default (0.04).
         model: torchcrepe model size (default 'full').
 
     Returns:
@@ -122,9 +122,9 @@ def extract_melody_with_bpm(
         mp3_path: Path to input MP3 file.
         cache_dir: Directory for cached .npz files. Defaults to None (no caching).
         periodicity_threshold: Minimum periodicity confidence for voiced frames.
-            None uses the default (0.5).
+            None uses the default (0.6).
         min_note_dur: Minimum note duration in seconds.
-            None uses the default (0.06).
+            None uses the default (0.04).
         model: torchcrepe model size (default 'full').
 
     Returns:
