@@ -71,25 +71,29 @@ def extract_reference_melody(mxl_path: Path) -> List[Note]:
             continue
 
         # Apply skyline: keep only the highest note at each onset
-        if onset_seconds not in onset_to_notes:
-            onset_to_notes[onset_seconds] = {
+        # Round onset to avoid floating-point key collision issues
+        onset_key = round(onset_seconds, 3)
+        if onset_key not in onset_to_notes:
+            onset_to_notes[onset_key] = {
                 "pitch": pitch,
                 "duration": duration_seconds,
+                "onset_exact": onset_seconds,
                 "velocity": element.volume.velocity if element.volume else 80,
             }
         else:
             # If we already have a note at this onset, keep the higher pitch
-            if pitch > onset_to_notes[onset_seconds]["pitch"]:
-                onset_to_notes[onset_seconds]["pitch"] = pitch
+            if pitch > onset_to_notes[onset_key]["pitch"]:
+                onset_to_notes[onset_key]["pitch"] = pitch
+                onset_to_notes[onset_key]["duration"] = duration_seconds
 
     # Convert to sorted list of Note objects
     notes = []
-    for onset_seconds in sorted(onset_to_notes.keys()):
-        note_data = onset_to_notes[onset_seconds]
+    for onset_key in sorted(onset_to_notes.keys()):
+        note_data = onset_to_notes[onset_key]
         notes.append(
             Note(
                 pitch=note_data["pitch"],
-                onset=onset_seconds,
+                onset=note_data.get("onset_exact", onset_key),
                 duration=note_data["duration"],
                 velocity=note_data["velocity"] or 80,
             )

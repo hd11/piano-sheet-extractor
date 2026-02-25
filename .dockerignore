@@ -1,0 +1,14 @@
+.venv/
+.git/
+.omc/
+.claude/
+.ruff_cache/
+.sisyphus/
+test/
+results/
+output/
+__pycache__/
+*.pyc
+*.log
+NUL
+node_modules/

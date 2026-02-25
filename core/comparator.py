@@ -116,6 +116,7 @@ def _calculate_pitch_class_f1(ref_notes: List[Note], gen_notes: List[Note]) -> f
     gen_pitches_hz = mir_eval.util.midi_to_hz(gen_pitches_normalized)
 
     # Use 200ms onset tolerance, 50 cents pitch tolerance
+    # offset_ratio=None disables note-offset matching (standard for melody evaluation)
     precision, recall, f1, _ = mir_eval.transcription.precision_recall_f1_overlap(
         ref_intervals,
         ref_pitches_hz,
@@ -123,6 +124,7 @@ def _calculate_pitch_class_f1(ref_notes: List[Note], gen_notes: List[Note]) -> f
         gen_pitches_hz,
         onset_tolerance=0.2,
         pitch_tolerance=50.0,
+        offset_ratio=None,
     )
 
     return float(f1)
@@ -181,6 +183,7 @@ def _calculate_melody_f1(
         gen_pitches_hz,
         onset_tolerance=onset_tolerance,
         pitch_tolerance=pitch_tolerance,
+        offset_ratio=None,
     )
 
     return float(f1)

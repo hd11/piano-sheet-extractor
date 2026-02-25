@@ -20,7 +20,9 @@ _TARGET_SR = 16000  # torchcrepe expects 16 kHz
 _MIDI_MIN = 21  # A0
 _MIDI_MAX = 108  # C8
 _DEFAULT_PERIODICITY_THRESHOLD = 0.5
-_DEFAULT_MIN_NOTE_DUR = 0.02  # seconds
+_DEFAULT_MIN_NOTE_DUR = 0.06  # seconds (increased from 0.02 to filter vibrato fragments)
+_VIBRATO_TOLERANCE = 1  # semitones: allow +/-1 MIDI value within a note
+_GAP_BRIDGE_SEC = 0.05  # bridge unvoiced gaps shorter than 50ms
 
 
 def extract_f0(
@@ -137,7 +139,8 @@ def f0_to_notes(
             if _MIDI_MIN <= rounded <= _MIDI_MAX:
                 midi[i] = rounded
 
-    # Group consecutive frames with the same MIDI pitch into notes
+    # Group consecutive frames into notes with vibrato tolerance and gap bridging
+    gap_bridge_frames = int(_GAP_BRIDGE_SEC / hop_sec)
     notes: list[Note] = []
     i = 0
     while i < n_frames:
@@ -145,19 +148,43 @@ def f0_to_notes(
             i += 1
             continue
 
-        current_pitch = midi[i]
+        # Start a new note region
         start = i
+        pitch_frames: list[int] = [midi[i]]
         j = i + 1
-        while j < n_frames and midi[j] == current_pitch:
-            j += 1
 
+        while j < n_frames:
+            if midi[j] >= 0:
+                # Voiced frame: check if within vibrato tolerance of the median
+                median_pitch = int(np.median(pitch_frames))
+                if abs(midi[j] - median_pitch) <= _VIBRATO_TOLERANCE:
+                    pitch_frames.append(midi[j])
+                    j += 1
+                    continue
+                else:
+                    break  # pitch jump beyond tolerance → new note
+            else:
+                # Unvoiced frame: bridge short gaps
+                gap_end = j
+                while gap_end < n_frames and midi[gap_end] < 0:
+                    gap_end += 1
+                if (gap_end - j) <= gap_bridge_frames and gap_end < n_frames:
+                    # Check if the note after the gap is still in tolerance
+                    median_pitch = int(np.median(pitch_frames))
+                    if abs(midi[gap_end] - median_pitch) <= _VIBRATO_TOLERANCE:
+                        j = gap_end  # skip the gap, continue note
+                        continue
+                break  # gap too long or pitch mismatch after gap
+
+        # Use median pitch for the note (robust against vibrato)
+        final_pitch = int(np.median(pitch_frames))
         onset_sec = start * hop_sec
         duration_sec = (j - start) * hop_sec
 
         if duration_sec >= min_note_dur:
             notes.append(
                 Note(
-                    pitch=int(current_pitch),
+                    pitch=final_pitch,
                     onset=round(onset_sec, 4),
                     duration=round(duration_sec, 4),
                 )
