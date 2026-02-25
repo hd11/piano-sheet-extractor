@@ -1,0 +1,105 @@
+{
+  "summary": {
+    "total_songs": 8,
+    "avg_pitch_class_f1": 0.22312870725328998,
+    "avg_chroma_similarity": 0.9685563880889849
+  },
+  "songs": {
+    "Golden": {
+      "pitch_class_f1": 0.0748031496062992,
+      "chroma_similarity": 0.9763307021381016,
+      "melody_f1_strict": 0.00984251968503937,
+      "melody_f1_lenient": 0.021653543307086614,
+      "onset_f1": 0.32283464566929126,
+      "note_counts": {
+        "ref": 588,
+        "gen": 428
+      },
+      "processing_time": 4.9
+    },
+    "IRIS OUT": {
+      "pitch_class_f1": 0.1176470588235294,
+      "chroma_similarity": 0.9440598307255988,
+      "melody_f1_strict": 0.0036764705882352936,
+      "melody_f1_lenient": 0.011029411764705881,
+      "onset_f1": 0.48713235294117657,
+      "note_counts": {
+        "ref": 734,
+        "gen": 354
+      },
+      "processing_time": 25.6
+    },
+    "꿈의 버스": {
+      "pitch_class_f1": 0.3058823529411765,
+      "chroma_similarity": 0.9879339865925036,
+      "melody_f1_strict": 0.0,
+      "melody_f1_lenient": 0.004705882352941177,
+      "onset_f1": 0.5129411764705881,
+      "note_counts": {
+        "ref": 477,
+        "gen": 373
+      },
+      "processing_time": 3.3
+    },
+    "너에게100퍼센트": {
+      "pitch_class_f1": 0.3866906474820144,
+      "chroma_similarity": 0.9898382226483461,
+      "melody_f1_strict": 0.0,
+      "melody_f1_lenient": 0.0,
+      "onset_f1": 0.5359712230215828,
+      "note_counts": {
+        "ref": 649,
+        "gen": 463
+      },
+      "processing_time": 31.5
+    },
+    "달리 표현할 수 없어요": {
+      "pitch_class_f1": 0.1595298068849706,
+      "chroma_similarity": 0.9834338552479106,
+      "melody_f1_strict": 0.0,
+      "melody_f1_lenient": 0.001679261125104954,
+      "onset_f1": 0.47523089840470195,
+      "note_counts": {
+        "ref": 607,
+        "gen": 584
+      },
+      "processing_time": 34.9
+    },
+    "등불을 지키다": {
+      "pitch_class_f1": 0.4386973180076628,
+      "chroma_similarity": 0.9552920663865682,
+      "melody_f1_strict": 0.0019157088122605365,
+      "melody_f1_lenient": 0.0019157088122605365,
+      "onset_f1": 0.5000000000000001,
+      "note_counts": {
+        "ref": 653,
+        "gen": 391
+      },
+      "processing_time": 32.5
+    },
+    "비비드라라러브": {
+      "pitch_class_f1": 0.09029345372460496,
+      "chroma_similarity": 0.9188393801669125,
+      "melody_f1_strict": 0.020316027088036117,
+      "melody_f1_lenient": 0.05191873589164786,
+      "onset_f1": 0.35665914221218964,
+      "note_counts": {
+        "ref": 455,
+        "gen": 431
+      },
+      "processing_time": 37.2
+    },
+    "여름이었다": {
+      "pitch_class_f1": 0.211485870556062,
+      "chroma_similarity": 0.9927230608059382,
+      "melody_f1_strict": 0.05834092980856882,
+      "melody_f1_lenient": 0.18413855970829537,
+      "onset_f1": 0.5305378304466728,
+      "note_counts": {
+        "ref": 625,
+        "gen": 472
+      },
+      "processing_time": 29.3
+    }
+  }
+}

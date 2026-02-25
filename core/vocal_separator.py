@@ -122,7 +122,9 @@ def separate_vocals(
         from demucs.apply import apply_model
 
         # apply_model expects [batch, channels, samples], returns [batch, sources, channels, samples]
-        sources = apply_model(model, wav[None], device="cpu", progress=False)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info("Running Demucs on device=%s", device)
+        sources = apply_model(model, wav[None], device=device, progress=False)
 
     # Extract vocals (index 3: ['drums', 'bass', 'other', 'vocals'])
     vocals_idx = model.sources.index("vocals")

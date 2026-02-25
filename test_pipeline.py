@@ -13,6 +13,7 @@ logging.basicConfig(
 from core.vocal_melody_extractor import extract_melody
 from core.reference_extractor import extract_reference_melody
 from core.comparator import compare_melodies
+from core.postprocess import find_optimal_time_offset, apply_time_offset, apply_octave_correction
 
 def test_song(mp3_name: str, mxl_name: str):
     """Test pipeline on a single song."""
@@ -35,16 +36,22 @@ def test_song(mp3_name: str, mxl_name: str):
         reference = extract_reference_melody(mxl_path)
         print(f"      ✓ Reference has {len(reference)} notes")
         
-        # Compare melodies
-        print(f"[3/3] Comparing melodies...")
-        metrics = compare_melodies(extracted, reference)
+        # Post-process: octave correction + time alignment
+        print(f"[3/3] Post-processing and comparing...")
+        extracted = apply_octave_correction(extracted, reference)
+        offset = find_optimal_time_offset(extracted, reference)
+        extracted = apply_time_offset(extracted, offset)
+        print(f"      Time offset: {offset:.3f}s")
+        metrics = compare_melodies(reference, extracted)
         
         # Print results
         print(f"\n      Results for {mp3_name}:")
-        print(f"      - pitch_class_f1: {metrics['pitch_class_f1']:.4f}")
-        print(f"      - raw_pitch_f1:   {metrics['raw_pitch_f1']:.4f}")
-        print(f"      - voicing_recall: {metrics['voicing_recall']:.4f}")
-        print(f"      - voicing_false_alarm: {metrics['voicing_false_alarm']:.4f}")
+        print(f"      - pitch_class_f1:   {metrics['pitch_class_f1']:.4f}")
+        print(f"      - chroma_similarity: {metrics['chroma_similarity']:.4f}")
+        print(f"      - melody_f1_strict: {metrics['melody_f1_strict']:.4f}")
+        print(f"      - melody_f1_lenient: {metrics['melody_f1_lenient']:.4f}")
+        print(f"      - onset_f1:         {metrics['onset_f1']:.4f}")
+        print(f"      - notes: {metrics['note_counts']['gen']}/{metrics['note_counts']['ref']}")
         
         return metrics['pitch_class_f1']
         

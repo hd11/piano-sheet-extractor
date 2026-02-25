@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.vocal_melody_extractor import extract_melody
 from core.reference_extractor import extract_reference_melody
 from core.comparator import compare_melodies
+from core.postprocess import find_optimal_time_offset, apply_time_offset, apply_octave_correction
 
 
 def evaluate_all_songs(input_dir: Path, output_path: Path):
@@ -67,6 +68,11 @@ def evaluate_all_songs(input_dir: Path, output_path: Path):
                 n for n in extract_reference_melody(mxl_path) if n.duration > 0
             ]
             gen_notes = [n for n in gen_notes if n.duration > 0]
+
+            # Post-processing: octave correction + time alignment
+            gen_notes = apply_octave_correction(gen_notes, ref_notes)
+            offset = find_optimal_time_offset(gen_notes, ref_notes)
+            gen_notes = apply_time_offset(gen_notes, offset)
 
             # Compare
             metrics = compare_melodies(ref_notes, gen_notes)

@@ -7,7 +7,6 @@ test/cache/
 dist/
 build/
 .ruff_cache/
-results/
 output/
 .sisyphus/
 .sisyphusnotepad*

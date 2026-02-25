@@ -24,7 +24,7 @@ from pathlib import Path
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.vocal_melody_extractor import extract_melody
+from core.vocal_melody_extractor import extract_melody, extract_melody_with_bpm
 from core.musicxml_writer import save_musicxml
 
 # Configure logging
@@ -40,7 +40,7 @@ def process_single_file(
     output_musicxml: Path,
     cache_dir: Path,
     title: str,
-    bpm: float,
+    bpm: float | None,
 ) -> bool:
     """Process a single MP3 file.
 
@@ -49,7 +49,7 @@ def process_single_file(
         output_musicxml: Path to output MusicXML file.
         cache_dir: Directory for caching.
         title: Song title.
-        bpm: Tempo in BPM.
+        bpm: Tempo in BPM. None for auto-detection.
 
     Returns:
         True if successful, False otherwise.
@@ -60,17 +60,21 @@ def process_single_file(
     logger.info("Input: %s", input_mp3)
     logger.info("Output: %s", output_musicxml)
     logger.info("Title: %s", title)
-    logger.info("BPM: %.1f", bpm)
+    logger.info("BPM: %s", f"{bpm:.1f}" if bpm is not None else "auto-detect")
     logger.info("=" * 60)
 
     timings = {}
     total_start = time.time()
 
     try:
-        # Step 1: Melody extraction
+        # Step 1: Melody extraction (with BPM detection if needed)
         logger.info("\n[Step 1/2] Melody Extraction")
         step_start = time.time()
-        notes = extract_melody(input_mp3, cache_dir)
+        if bpm is None:
+            notes, bpm = extract_melody_with_bpm(input_mp3, cache_dir)
+            logger.info("Auto-detected BPM: %.1f", bpm)
+        else:
+            notes = extract_melody(input_mp3, cache_dir)
         timings["melody_extraction"] = time.time() - step_start
         logger.info(
             "✓ Melody extraction complete (%.1fs)", timings["melody_extraction"]
@@ -170,13 +174,23 @@ Examples:
     )
     parser.add_argument(
         "--bpm",
-        type=float,
-        default=120.0,
-        help="Tempo in BPM (default: 120)",
+        type=str,
+        default="auto",
+        help="Tempo in BPM, or 'auto' for auto-detection (default: auto)",
     )
 
     args = parser.parse_args()
     cache_dir = Path(args.cache_dir)
+
+    # Parse BPM: "auto" -> None, otherwise float
+    if args.bpm.lower() == "auto":
+        bpm = None
+    else:
+        try:
+            bpm = float(args.bpm)
+        except ValueError:
+            logger.error("Invalid --bpm value: %s (use a number or 'auto')", args.bpm)
+            sys.exit(1)
 
     # Determine mode
     if args.input_dir and args.output_dir:
@@ -204,7 +218,7 @@ Examples:
             output_musicxml = output_dir / f"{input_mp3.stem}.musicxml"
             title = input_mp3.stem
             if process_single_file(
-                input_mp3, output_musicxml, cache_dir, title, args.bpm
+                input_mp3, output_musicxml, cache_dir, title, bpm
             ):
                 successful += 1
             logger.info("")
@@ -231,7 +245,7 @@ Examples:
 
         title = args.title if args.title else input_mp3.stem
         if not process_single_file(
-            input_mp3, output_musicxml, cache_dir, title, args.bpm
+            input_mp3, output_musicxml, cache_dir, title, bpm
         ):
             sys.exit(1)
 

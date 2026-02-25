@@ -17,19 +17,19 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 _TARGET_SR = 16000  # torchcrepe expects 16 kHz
-_MIDI_MIN = 21  # A0
-_MIDI_MAX = 108  # C8
-_DEFAULT_PERIODICITY_THRESHOLD = 0.5
-_DEFAULT_MIN_NOTE_DUR = 0.06  # seconds (increased from 0.02 to filter vibrato fragments)
-_VIBRATO_TOLERANCE = 1  # semitones: allow +/-1 MIDI value within a note
-_GAP_BRIDGE_SEC = 0.05  # bridge unvoiced gaps shorter than 50ms
+_MIDI_MIN = 36  # C2 - wide vocal range bottom
+_MIDI_MAX = 96  # C7 - wide vocal range top
+_DEFAULT_PERIODICITY_THRESHOLD = 0.6
+_DEFAULT_MIN_NOTE_DUR = 0.04  # seconds
+_VIBRATO_TOLERANCE = 1.5  # semitones (float for float-MIDI space)
+_GAP_BRIDGE_SEC = 0.06  # bridge unvoiced gaps shorter than 60ms
 
 
 def extract_f0(
     vocals: np.ndarray,
     sr: int,
     hop_ms: float = 10.0,
-    model: str = "tiny",
+    model: str = "full",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract F0 and periodicity from a vocal signal using torchcrepe.
 
@@ -42,7 +42,7 @@ def extract_f0(
     hop_ms : float
         Hop size in milliseconds (default 10 ms).
     model : str
-        torchcrepe model size (default ``'tiny'``).
+        torchcrepe model size (default ``'full'``).
 
     Returns
     -------
@@ -81,6 +81,7 @@ def extract_f0(
         device=device,
         return_periodicity=True,
         batch_size=512,
+        # decoder=torchcrepe.decode.viterbi,  # disabled: may over-smooth
     )
 
     # Squeeze batch dimension -> 1-D numpy
@@ -89,7 +90,7 @@ def extract_f0(
 
     # Median filter to smooth pitch
     pitch = (
-        torchcrepe.filter.median(torch.tensor(pitch).unsqueeze(0), 3).squeeze(0).numpy()
+        torchcrepe.filter.median(torch.tensor(pitch).unsqueeze(0), 5).squeeze(0).numpy()
     )
 
     logger.info("F0 extracted: %d frames", len(pitch))
@@ -130,16 +131,16 @@ def f0_to_notes(
             f"f0 length ({n_frames}) != periodicity length ({len(periodicity)})"
         )
 
-    # Build a voiced-MIDI array; unvoiced frames get midi = -1
-    midi = np.full(n_frames, -1, dtype=np.int32)
+    # Build a voiced float-MIDI array; unvoiced frames get -1.0
+    midi = np.full(n_frames, -1.0, dtype=np.float64)
     for i in range(n_frames):
         if periodicity[i] >= periodicity_threshold and f0[i] > 0:
             raw_midi = 12.0 * np.log2(f0[i] / 440.0) + 69.0
-            rounded = int(np.round(raw_midi))
-            if _MIDI_MIN <= rounded <= _MIDI_MAX:
-                midi[i] = rounded
+            if _MIDI_MIN <= raw_midi <= _MIDI_MAX:
+                midi[i] = raw_midi
 
     # Group consecutive frames into notes with vibrato tolerance and gap bridging
+    # Work in float MIDI space to avoid integer quantization artifacts
     gap_bridge_frames = int(_GAP_BRIDGE_SEC / hop_sec)
     notes: list[Note] = []
     i = 0
@@ -150,13 +151,13 @@ def f0_to_notes(
 
         # Start a new note region
         start = i
-        pitch_frames: list[int] = [midi[i]]
+        pitch_frames: list[float] = [midi[i]]
         j = i + 1
 
         while j < n_frames:
             if midi[j] >= 0:
                 # Voiced frame: check if within vibrato tolerance of the median
-                median_pitch = int(np.median(pitch_frames))
+                median_pitch = float(np.median(pitch_frames))
                 if abs(midi[j] - median_pitch) <= _VIBRATO_TOLERANCE:
                     pitch_frames.append(midi[j])
                     j += 1
@@ -170,14 +171,14 @@ def f0_to_notes(
                     gap_end += 1
                 if (gap_end - j) <= gap_bridge_frames and gap_end < n_frames:
                     # Check if the note after the gap is still in tolerance
-                    median_pitch = int(np.median(pitch_frames))
+                    median_pitch = float(np.median(pitch_frames))
                     if abs(midi[gap_end] - median_pitch) <= _VIBRATO_TOLERANCE:
                         j = gap_end  # skip the gap, continue note
                         continue
                 break  # gap too long or pitch mismatch after gap
 
-        # Use median pitch for the note (robust against vibrato)
-        final_pitch = int(np.median(pitch_frames))
+        # Round the final median to integer MIDI only at the end
+        final_pitch = int(np.round(np.median(pitch_frames)))
         onset_sec = start * hop_sec
         duration_sec = (j - start) * hop_sec
 
