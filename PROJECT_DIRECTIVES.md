@@ -73,6 +73,55 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 
 ## 변경 이력
 
+### v8 (2026-02-27) — BP+CQT 독립 멜로디 추출 (참조 파일 없이)
+
+**목적**: 참조 악보(.mxl) 없이 MP3만으로 보컬 멜로디를 추출하는 독립 파이프라인 구축
+
+**변경사항**:
+1. `core/vocal_melody_extractor.py` 전면 교체 — CREPE F0 기반 → Basic Pitch + CQT 옥타브 보정
+2. 새 파이프라인: `separate_vocals → BP (raw ∩ harmonic intersection) → CQT octave shift`
+3. 기존 함수 시그니처 유지 (backward compatible)
+
+**새 파이프라인 상세**:
+- Basic Pitch (Spotify): 폴리포닉 노트 감지 (onset=0.5, frame=0.3, min_note=127ms)
+- 이중 BP 실행: 원본 보컬 + 하모닉 강화 보컬 (librosa.effects.harmonic, margin=8.0)
+- 교차 필터링: 두 결과의 교집합만 유지 (onset 150ms 이내 + 동일 pitch class)
+- CQT 옥타브 보정: CQT salience median vs BP median → 가장 가까운 12의 배수로 이동 (완전 독립, 참조 불요)
+- Weighted melody: 동시 노트 중 velocity + pitch continuity 최선 선택
+
+**결과** (꿈의 버스, 시간 정렬 후):
+
+| 메트릭 | v7 (ref-guided) | v8 (독립) | 비고 |
+|---|---|---|---|
+| pitch_class_f1 | 1.000 | **0.719** | 참조 없이 달성 |
+| melody_f1_lenient | — | **0.715** | 200ms 허용, 정확한 피치 |
+| melody_f1_strict | — | **0.425** | 50ms 허용 |
+| onset_f1 | — | **0.674** | — |
+| chroma_similarity | — | **0.995** | — |
+
+**오류 분석** (346개 onset 매칭 노트 중):
+- 80.3% 정확한 피치 (278/346)
+- 14.5% -1/-2 반음 flat bias (50/346) — BP 모델 고유 한계
+- 131/477 참조 노트 미감지 (27%) — BP 감지 한계
+
+**시도했으나 폐기한 접근** (17+ 실험):
+- RMVPE: 체크포인트 아키텍처 불일치 (intermediate 256→512 채널)로 포기
+- FCPE (torchfcpe): avg MIDI 64.2, pc_f1=0.352 — BP보다 훨씬 저조
+- BP 후방 posterior 이동: API 변경으로 실패
+- CQT per-note 피치 보정: 해상도 부족 (1 bin/semitone), 오히려 악화
+- pyin 하이브리드 (BP 타이밍 + pyin 피치): +2 정확 노트이나 전체 mel_f1 하락
+- 입력 오디오 피치 시프트 (+50~200 cent): BP 정확도 악화
+- 낮은 BP 임계값 (onset=0.3, frame=0.2 등): 교집합으로도 FP 제거 불가
+- 3-way 앙상블 (raw+harmonic+bandpass): 2-way 대비 개선 없음
+- Soft intersection (±2 반음 허용): precision 하락
+- Merge/union 접근: FP 증가로 precision 하락
+- BP 전처리 변형 (bandpass, aggressive clean 등): 교집합이 더 효과적
+
+**한계**:
+- BP 모델의 ±1-2 반음 flat bias는 현재 도구로 해결 불가
+- 131개 미감지 노트는 BP 감지 한계 (조용한 구간, 인트로/아웃트로 집중)
+- Golden.mp3: pc_f1=0.481 (꿈의 버스보다 저조, 보컬 특성 차이)
+
 ### v7 (2026-02-26) — 파이프라인 통합 및 전곡 평가
 
 **변경사항**:
