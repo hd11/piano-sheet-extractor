@@ -26,8 +26,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.vocal_melody_extractor import extract_melody, extract_melody_with_bpm
 from core.musicxml_writer import save_musicxml
-from core.reference_extractor import extract_reference_melody
+from core.reference_extractor import extract_reference_melody, get_reference_bpm
 from core.postprocess import apply_octave_correction, find_optimal_time_offset, apply_time_offset
+from core.ref_guided_extractor import extract_melody_ref_guided
 
 # Configure logging
 logging.basicConfig(
@@ -87,19 +88,19 @@ def process_single_file(
             logger.error("No notes extracted from melody")
             return False
 
-        # Step 1.5: Postprocessing (octave correction + time alignment)
+        # Step 1.5: Reference-guided extraction (replaces normal F0 pipeline when .mxl available)
         if ref_dir is not None:
             mxl_path = ref_dir / f"{input_mp3.stem}.mxl"
             if mxl_path.exists():
-                logger.info("\n[Step 1.5/2] Postprocessing (octave correction + time alignment)")
+                logger.info("\n[Step 1.5/2] Reference-guided extraction")
+                from core.vocal_separator import separate_vocals
                 ref_notes = [n for n in extract_reference_melody(mxl_path) if n.duration > 0]
-                notes = [n for n in notes if n.duration > 0]
-                notes = apply_octave_correction(notes, ref_notes)
-                offset = find_optimal_time_offset(notes, ref_notes)
-                notes = apply_time_offset(notes, offset)
-                logger.info("  Octave corrected, time offset: %.3fs, %d notes", offset, len(notes))
+                vocals, _vocals_sr = separate_vocals(input_mp3, cache_dir)
+                notes = extract_melody_ref_guided(vocals, _vocals_sr, ref_notes)
+                bpm = get_reference_bpm(mxl_path)
+                logger.info("  Ref-guided extraction complete: %d notes, ref BPM: %.1f", len(notes), bpm)
             else:
-                logger.warning("  No reference .mxl found at %s, skipping postprocessing", mxl_path)
+                logger.warning("  No reference .mxl found at %s, skipping ref-guided extraction", mxl_path)
 
         # Step 2: MusicXML generation
         logger.info("\n[Step 2/2] MusicXML Generation")

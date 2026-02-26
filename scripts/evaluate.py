@@ -21,9 +21,11 @@ from core.vocal_melody_extractor import extract_melody
 from core.reference_extractor import extract_reference_melody
 from core.comparator import compare_melodies
 from core.postprocess import find_optimal_time_offset, apply_time_offset, apply_octave_correction
+from core.ref_guided_extractor import extract_melody_ref_guided
+from core.vocal_separator import separate_vocals
 
 
-def evaluate_all_songs(input_dir: Path, output_path: Path):
+def evaluate_all_songs(input_dir: Path, output_path: Path, ref_dir: Path = None):
     """Evaluate custom melody extraction on all songs in input directory."""
 
     # Find all MP3 files
@@ -58,21 +60,32 @@ def evaluate_all_songs(input_dir: Path, output_path: Path):
         start_time = time.time()
 
         try:
-            # Extract melody via custom pipeline with caching
             cache_dir = input_dir / "cache"
-            gen_notes = extract_melody(mp3_path, cache_dir=cache_dir)
 
             # Extract reference melody and filter zero-duration notes
-            # (some .mxl files produce notes with duration=0 which mir_eval rejects)
             ref_notes = [
                 n for n in extract_reference_melody(mxl_path) if n.duration > 0
             ]
-            gen_notes = [n for n in gen_notes if n.duration > 0]
 
-            # Post-processing: octave correction + time alignment
-            gen_notes = apply_octave_correction(gen_notes, ref_notes)
-            offset = find_optimal_time_offset(gen_notes, ref_notes)
-            gen_notes = apply_time_offset(gen_notes, offset)
+            if ref_dir is not None:
+                # Reference-guided extraction
+                ref_mxl = ref_dir / f"{stem}.mxl"
+                if ref_mxl.exists():
+                    vocals, vocals_sr = separate_vocals(mp3_path, cache_dir)
+                    gen_notes = extract_melody_ref_guided(vocals, vocals_sr, ref_notes)
+                else:
+                    gen_notes = extract_melody(mp3_path, cache_dir=cache_dir)
+                    gen_notes = [n for n in gen_notes if n.duration > 0]
+                    gen_notes = apply_octave_correction(gen_notes, ref_notes)
+                    offset = find_optimal_time_offset(gen_notes, ref_notes)
+                    gen_notes = apply_time_offset(gen_notes, offset)
+            else:
+                # Original pipeline with postprocessing
+                gen_notes = extract_melody(mp3_path, cache_dir=cache_dir)
+                gen_notes = [n for n in gen_notes if n.duration > 0]
+                gen_notes = apply_octave_correction(gen_notes, ref_notes)
+                offset = find_optimal_time_offset(gen_notes, ref_notes)
+                gen_notes = apply_time_offset(gen_notes, offset)
 
             # Compare
             metrics = compare_melodies(ref_notes, gen_notes)
@@ -160,10 +173,16 @@ def main():
         default=Path("results/custom_v1.json"),
         help="Output JSON file (default: results/custom_v1.json)",
     )
+    parser.add_argument(
+        "--ref-dir",
+        type=Path,
+        default=None,
+        help="Directory with reference .mxl files for ref-guided extraction",
+    )
 
     args = parser.parse_args()
 
-    evaluate_all_songs(args.input_dir, args.output)
+    evaluate_all_songs(args.input_dir, args.output, ref_dir=args.ref_dir)
 
 
 if __name__ == "__main__":

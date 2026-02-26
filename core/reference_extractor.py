@@ -8,6 +8,19 @@ import music21
 from .types import Note
 
 
+def get_reference_bpm(mxl_path: Path) -> float:
+    """Get the primary BPM from a reference .mxl file.
+
+    Returns:
+        Effective quarter-note BPM from the first tempo marking.
+    """
+    score = music21.converter.parse(str(mxl_path))
+    if not score.parts:
+        return 120.0
+    tempo_map = _build_tempo_map(score.parts[0])
+    return tempo_map[0][1] if tempo_map else 120.0
+
+
 def extract_reference_melody(mxl_path: Path) -> List[Note]:
     """Extract melody from .mxl piano arrangement using skyline algorithm.
 
