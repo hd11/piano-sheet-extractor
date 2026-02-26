@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 _TARGET_SR = 16000  # torchcrepe expects 16 kHz
 _MIDI_MIN = 36  # C2 - wide vocal range bottom
 _MIDI_MAX = 96  # C7 - wide vocal range top
-_DEFAULT_PERIODICITY_THRESHOLD = 0.6
+_DEFAULT_PERIODICITY_THRESHOLD = 0.45
 _DEFAULT_MIN_NOTE_DUR = 0.04  # seconds
-_VIBRATO_TOLERANCE = 1.5  # semitones (float for float-MIDI space)
-_GAP_BRIDGE_SEC = 0.06  # bridge unvoiced gaps shorter than 60ms
+_VIBRATO_TOLERANCE = 1.0  # semitones (float for float-MIDI space)
+_GAP_BRIDGE_SEC = 0.10  # bridge unvoiced gaps shorter than 100ms
 
 
 def extract_f0(
@@ -81,7 +81,7 @@ def extract_f0(
         device=device,
         return_periodicity=True,
         batch_size=512,
-        # decoder=torchcrepe.decode.viterbi,  # disabled: may over-smooth
+        decoder=torchcrepe.decode.viterbi,
     )
 
     # Squeeze batch dimension -> 1-D numpy
@@ -90,7 +90,7 @@ def extract_f0(
 
     # Median filter to smooth pitch
     pitch = (
-        torchcrepe.filter.median(torch.tensor(pitch).unsqueeze(0), 5).squeeze(0).numpy()
+        torchcrepe.filter.median(torch.tensor(pitch).unsqueeze(0), 3).squeeze(0).numpy()
     )
 
     logger.info("F0 extracted: %d frames", len(pitch))
@@ -154,11 +154,15 @@ def f0_to_notes(
         pitch_frames: list[float] = [midi[i]]
         j = i + 1
 
+        # Anchor pitch from the first few frames to prevent drift
+        anchor_pitch = midi[i]
+
         while j < n_frames:
             if midi[j] >= 0:
-                # Voiced frame: check if within vibrato tolerance of the median
-                median_pitch = float(np.median(pitch_frames))
-                if abs(midi[j] - median_pitch) <= _VIBRATO_TOLERANCE:
+                # Voiced frame: check if within vibrato tolerance of the anchor
+                if len(pitch_frames) >= 5 and anchor_pitch == midi[i]:
+                    anchor_pitch = float(np.median(pitch_frames[:5]))
+                if abs(midi[j] - anchor_pitch) <= _VIBRATO_TOLERANCE:
                     pitch_frames.append(midi[j])
                     j += 1
                     continue
@@ -171,8 +175,7 @@ def f0_to_notes(
                     gap_end += 1
                 if (gap_end - j) <= gap_bridge_frames and gap_end < n_frames:
                     # Check if the note after the gap is still in tolerance
-                    median_pitch = float(np.median(pitch_frames))
-                    if abs(midi[gap_end] - median_pitch) <= _VIBRATO_TOLERANCE:
+                    if abs(midi[gap_end] - anchor_pitch) <= _VIBRATO_TOLERANCE:
                         j = gap_end  # skip the gap, continue note
                         continue
                 break  # gap too long or pitch mismatch after gap
