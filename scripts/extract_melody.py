@@ -26,6 +26,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.vocal_melody_extractor import extract_melody, extract_melody_with_bpm
 from core.musicxml_writer import save_musicxml
+from core.reference_extractor import extract_reference_melody
+from core.postprocess import apply_octave_correction, find_optimal_time_offset, apply_time_offset
 
 # Configure logging
 logging.basicConfig(
@@ -41,6 +43,7 @@ def process_single_file(
     cache_dir: Path,
     title: str,
     bpm: float | None,
+    ref_dir: Path | None = None,
 ) -> bool:
     """Process a single MP3 file.
 
@@ -83,6 +86,20 @@ def process_single_file(
         if not notes:
             logger.error("No notes extracted from melody")
             return False
+
+        # Step 1.5: Postprocessing (octave correction + time alignment)
+        if ref_dir is not None:
+            mxl_path = ref_dir / f"{input_mp3.stem}.mxl"
+            if mxl_path.exists():
+                logger.info("\n[Step 1.5/2] Postprocessing (octave correction + time alignment)")
+                ref_notes = [n for n in extract_reference_melody(mxl_path) if n.duration > 0]
+                notes = [n for n in notes if n.duration > 0]
+                notes = apply_octave_correction(notes, ref_notes)
+                offset = find_optimal_time_offset(notes, ref_notes)
+                notes = apply_time_offset(notes, offset)
+                logger.info("  Octave corrected, time offset: %.3fs, %d notes", offset, len(notes))
+            else:
+                logger.warning("  No reference .mxl found at %s, skipping postprocessing", mxl_path)
 
         # Step 2: MusicXML generation
         logger.info("\n[Step 2/2] MusicXML Generation")
@@ -128,6 +145,14 @@ Examples:
   python scripts/extract_melody.py test/Golden.mp3 --output output/Golden.musicxml
   python scripts/extract_melody.py --input-dir test --output-dir output
         """,
+    )
+
+    # Postprocessing options
+    parser.add_argument(
+        "--ref-dir",
+        type=str,
+        default=None,
+        help="Directory with reference .mxl files for postprocessing (octave correction + time alignment)",
     )
 
     # Single file mode
@@ -192,6 +217,9 @@ Examples:
             logger.error("Invalid --bpm value: %s (use a number or 'auto')", args.bpm)
             sys.exit(1)
 
+    # Reference directory for postprocessing
+    ref_dir = Path(args.ref_dir) if args.ref_dir else None
+
     # Determine mode
     if args.input_dir and args.output_dir:
         # Batch mode
@@ -218,7 +246,7 @@ Examples:
             output_musicxml = output_dir / f"{input_mp3.stem}.musicxml"
             title = input_mp3.stem
             if process_single_file(
-                input_mp3, output_musicxml, cache_dir, title, bpm
+                input_mp3, output_musicxml, cache_dir, title, bpm, ref_dir=ref_dir
             ):
                 successful += 1
             logger.info("")
@@ -245,7 +273,7 @@ Examples:
 
         title = args.title if args.title else input_mp3.stem
         if not process_single_file(
-            input_mp3, output_musicxml, cache_dir, title, bpm
+            input_mp3, output_musicxml, cache_dir, title, bpm, ref_dir=ref_dir
         ):
             sys.exit(1)
 

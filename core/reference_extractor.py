@@ -105,24 +105,37 @@ def extract_reference_melody(mxl_path: Path) -> List[Note]:
 def _build_tempo_map(part: music21.stream.Part) -> list:
     """Build a tempo map from MetronomeMarkBoundaries.
 
+    Returns effective quarter-note BPM by accounting for the referent duration.
+    E.g., "dotted quarter = 122" means 122 * 1.5 = 183 quarter notes per minute.
+
     Args:
         part: music21 Part to extract tempo marks from.
 
     Returns:
-        List of (offset_in_quarters, bpm) tuples, sorted by offset.
+        List of (offset_in_quarters, effective_quarter_bpm) tuples, sorted by offset.
         Falls back to [(0.0, 120)] if no tempo marks found.
     """
     try:
         boundaries = part.metronomeMarkBoundaries()
         if boundaries:
-            return [(start, mm.number) for start, _end, mm in boundaries]
+            result = []
+            for start, _end, mm in boundaries:
+                referent_ql = mm.referent.quarterLength if mm.referent else 1.0
+                effective_bpm = mm.number * referent_ql
+                result.append((start, effective_bpm))
+            return result
     except Exception:
         pass
 
     # Fallback: check for MetronomeMarks in flattened stream
     tempos = list(part.flatten().getElementsByClass(music21.tempo.MetronomeMark))
     if tempos:
-        return [(float(tm.offset), tm.number) for tm in tempos]
+        result = []
+        for tm in tempos:
+            referent_ql = tm.referent.quarterLength if tm.referent else 1.0
+            effective_bpm = tm.number * referent_ql
+            result.append((float(tm.offset), effective_bpm))
+        return result
 
     # Default to 120 BPM
     return [(0.0, 120)]
