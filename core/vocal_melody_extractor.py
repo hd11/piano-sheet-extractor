@@ -1041,6 +1041,59 @@ def _pesto_f0_extract(
     return f0_hz, conf, times
 
 
+def _pesto_pitch_correction(
+    notes: list[Note],
+    vocals: np.ndarray,
+    sr: int,
+) -> list[Note]:
+    """Replace BP pitch with pesto-pitch F0 median per note window.
+
+    Unlike CREPE correction (+1/+2 only), this replaces BP pitch entirely
+    with pesto's vocal-specialised F0, without semitone restriction.
+    Only replaces when pesto has 3+ confident frames in the note window.
+    """
+    if not notes:
+        return notes
+
+    try:
+        f0_hz, conf, times = _pesto_f0_extract(vocals, sr)
+    except Exception as e:
+        logger.warning("pesto pitch correction failed (%s), using BP pitches", e)
+        return notes
+
+    voiced = conf >= _PESTO_CONF_THRESH
+    corrected: list[Note] = []
+    n_changed = 0
+
+    for n in notes:
+        mask = (times >= n.onset) & (times < n.onset + n.duration) & voiced
+        if np.sum(mask) < 3:
+            corrected.append(n)
+            continue
+
+        pesto_f0 = f0_hz[mask]
+        pesto_f0 = pesto_f0[pesto_f0 > 0]
+        if len(pesto_f0) == 0:
+            corrected.append(n)
+            continue
+
+        median_hz = float(np.median(pesto_f0))
+        pesto_midi = int(round(12.0 * np.log2(median_hz / 440.0) + 69.0))
+
+        if _VOCAL_MIDI_LOW - 3 <= pesto_midi <= _VOCAL_MIDI_HIGH + 5:
+            corrected.append(Note(pitch=pesto_midi, onset=n.onset, duration=n.duration, velocity=n.velocity))
+            if pesto_midi != n.pitch:
+                n_changed += 1
+        else:
+            corrected.append(n)
+
+    logger.info(
+        "pesto pitch correction: %d/%d notes pitch-replaced",
+        n_changed, len(notes),
+    )
+    return corrected
+
+
 def _vocmodel_pipeline(vocals_f32: np.ndarray, sr: int) -> list[Note]:
     """Extract monophonic melody via pesto-pitch F0 + windowed CQT octave correction.
 
@@ -1073,7 +1126,7 @@ def _vocmodel_pipeline(vocals_f32: np.ndarray, sr: int) -> list[Note]:
 
 
 # Set to True to use pesto-pitch (vocal-specialised) instead of Basic Pitch
-USE_VOCAL_MODEL = True
+USE_VOCAL_MODEL = False
 
 
 def extract_melody(
@@ -1142,6 +1195,8 @@ def extract_melody(
         for n in bp_notes
         if _VOCAL_MIDI_LOW - 3 <= n.pitch + shift <= _VOCAL_MIDI_HIGH + 5
     ]
+
+    notes = _pesto_pitch_correction(notes, vocals_f32, sr)
 
     logger.info(
         "extract_melody: pipeline complete, %d notes (shift=%+d)",

@@ -130,6 +130,7 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 | 순서 | 방법 | 상태 | 꿈의 버스 pc_f1 | 비고 |
 |---|---|---|---|---|
 | 1 | pesto-pitch (ISMIR 2023, MIR-1K 보컬 특화) | ❌ 실패 | 0.637 (기준 0.728) | contour 0.662(-0.14), interval 0.928(-0.06), 150.5s(11x 느림) |
+| 2 | BP onset + pesto pitch 하이브리드 | ❌ 실패 | 0.703 (기준 0.728) | 373/413 노트 교체(90%), -0.025 하락, 49s |
 
 **v12 실패 원인 분석 (2026-02-27)**:
 - pesto는 F0 frame만 출력 → _f0_to_notes() 변환 시 노트 세그멘테이션 품질 저하
@@ -138,9 +139,17 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 - 처리시간: BP 13s → pesto 150.5s (CQT+sectional offset 계산이 병목)
 - **결론**: F0 정확도보다 노트 세그멘테이션이 pc_f1의 핵심 병목
 
-**다음 방향**: BP 노트 경계는 유지하되 BP 피치를 pesto F0로 교체하는 하이브리드 접근
-- BP onset/offset 감지(강점) + pesto pitch(보컬 특화, 강점) 조합
-- 이유: 두 모델의 강점만 결합, 순수 pesto의 노트 세그멘테이션 약점 회피
+**v12 하이브리드 실패 원인 분석 (2026-02-27)**:
+- 373/413 노트(90%)가 pesto F0로 교체됐으나 pc_f1 0.728→0.703 (-0.025 하락)
+- BP의 피치 추정이 보컬에서도 pesto보다 실제로 더 정확하거나, pesto F0가 반주 잔여음에 오염
+- 노트 윈도우 내 pesto confident frame 기준(3+ frames) 충족해도 교체가 역효과
+- **결론**: pesto 피치 교체 전략 자체가 무효. BP 피치 품질이 병목이 아님을 입증
+
+**다음 방향 (v12 종료, 2026-02-27)**:
+- pesto 기반 접근(순수/하이브리드 모두) 포기: BP 피치가 실제 더 정확함이 입증됨
+- **남은 gap의 핵심**: 노트 수 부족 (gen=414 vs ref=477, -13%) → 미감지 원인 개선
+- 후보: Demucs 보컬 분리 품질 개선, BP 감도 조정(낮은 onset threshold), 또는 다른 AMT 모델
+- IRIS OUT(0.219, 서브하모닉 잠금) 근본 해결이 평균 상승의 핵심
 
 ## v11 상위곡 개선 후보 (진행 예정)
 
