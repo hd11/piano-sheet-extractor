@@ -145,11 +145,14 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 - 노트 윈도우 내 pesto confident frame 기준(3+ frames) 충족해도 교체가 역효과
 - **결론**: pesto 피치 교체 전략 자체가 무효. BP 피치 품질이 병목이 아님을 입증
 
-**다음 방향 (v12 종료, 2026-02-27)**:
+**v12 최종 결론 (2026-02-27)**:
 - pesto 기반 접근(순수/하이브리드 모두) 포기: BP 피치가 실제 더 정확함이 입증됨
-- **남은 gap의 핵심**: 노트 수 부족 (gen=414 vs ref=477, -13%) → 미감지 원인 개선
-- 후보: Demucs 보컬 분리 품질 개선, BP 감도 조정(낮은 onset threshold), 또는 다른 AMT 모델
-- IRIS OUT(0.219, 서브하모닉 잠금) 근본 해결이 평균 상승의 핵심
+- 절대명제 2번 재확인: 노트 수 비교는 판단 기준이 아님 (노트 수 직접 비교 금지)
+- **올바른 분석**: interval=0.986, chroma=0.995 → 음정·음고 분포 이미 우수
+- **실제 bottleneck**: contour=0.802 → 멜로디 방향(오르내림 윤곽)이 ~20% 틀림
+- BP flat bias(-1/-2 반음)가 동음 반복을 하강으로 오인하는 등 contour 오류 유발 가능성
+- **다음 방향**: 꿈의 버스 contour 오류 패턴 분석 — 어떤 구간에서 방향이 틀리는지 파악
+  - 이유: interval/chroma 개선은 여지 없음, contour 개선이 pc_f1 상승의 유일한 경로
 
 ## v11 상위곡 개선 후보 (진행 예정)
 
