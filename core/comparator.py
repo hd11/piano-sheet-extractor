@@ -69,9 +69,17 @@ def compare_melodies(ref_notes: List[Note], gen_notes: List[Note]) -> dict:
     # Calculate onset_f1 (pitch ignored)
     onset_f1 = _calculate_onset_f1(ref_notes, gen_notes)
 
+    # Calculate melody contour similarity (pattern-based, not note-count dependent)
+    contour_similarity = _calculate_contour_similarity(ref_notes, gen_notes)
+
+    # Calculate interval pattern similarity
+    interval_similarity = _calculate_interval_similarity(ref_notes, gen_notes)
+
     return {
         "pitch_class_f1": pitch_class_f1,
         "chroma_similarity": chroma_similarity,
+        "contour_similarity": contour_similarity,
+        "interval_similarity": interval_similarity,
         "melody_f1_strict": melody_f1_strict,
         "melody_f1_lenient": melody_f1_lenient,
         "onset_f1": onset_f1,
@@ -187,6 +195,87 @@ def _calculate_melody_f1(
     )
 
     return float(f1)
+
+
+def _calculate_contour_similarity(ref_notes: List[Note], gen_notes: List[Note]) -> float:
+    """Calculate melody contour similarity via time-quantized pitch correlation.
+
+    Converts both melodies to dense pitch contours (50ms steps), then computes
+    Pearson correlation. This captures whether the melodies go up/down at the
+    same times, regardless of exact note boundaries or note counts.
+    """
+    if not ref_notes or not gen_notes:
+        return 0.0
+
+    step = 0.05  # 50ms time steps
+    t_start = min(ref_notes[0].onset, gen_notes[0].onset)
+    t_end = max(ref_notes[-1].onset + ref_notes[-1].duration,
+                gen_notes[-1].onset + gen_notes[-1].duration)
+
+    if t_end <= t_start:
+        return 0.0
+
+    times = np.arange(t_start, t_end, step)
+    if len(times) < 10:
+        return 0.0
+
+    def _to_contour(notes: List[Note]) -> np.ndarray:
+        """Convert notes to pitch contour (pitch class at each time step)."""
+        contour = np.full(len(times), np.nan)
+        for n in notes:
+            mask = (times >= n.onset) & (times < n.onset + n.duration)
+            contour[mask] = n.pitch % 12
+        return contour
+
+    ref_contour = _to_contour(ref_notes)
+    gen_contour = _to_contour(gen_notes)
+
+    # Only compare time steps where both have notes
+    valid = ~np.isnan(ref_contour) & ~np.isnan(gen_contour)
+    if np.sum(valid) < 10:
+        return 0.0
+
+    rc = ref_contour[valid]
+    gc = gen_contour[valid]
+
+    # Compute fraction of time steps with matching pitch class
+    match_rate = float(np.mean(rc == gc))
+    return match_rate
+
+
+def _calculate_interval_similarity(ref_notes: List[Note], gen_notes: List[Note]) -> float:
+    """Calculate melodic interval pattern similarity.
+
+    Compares the sequence of pitch intervals (semitone changes between
+    consecutive notes) using cosine similarity of interval histograms.
+    This captures whether the melody moves by the same intervals regardless
+    of absolute pitch or timing.
+    """
+    if len(ref_notes) < 2 or len(gen_notes) < 2:
+        return 0.0
+
+    def _interval_histogram(notes: List[Note]) -> np.ndarray:
+        """Build histogram of pitch class intervals (-6 to +6 semitones mod 12)."""
+        hist = np.zeros(13)  # indices 0-12 represent intervals -6 to +6
+        for i in range(1, len(notes)):
+            interval = (notes[i].pitch % 12) - (notes[i - 1].pitch % 12)
+            # Wrap to -6..+6
+            interval = ((interval + 6) % 12) - 6
+            hist[interval + 6] += 1
+        return hist
+
+    ref_hist = _interval_histogram(ref_notes)
+    gen_hist = _interval_histogram(gen_notes)
+
+    # Normalize
+    ref_norm = ref_hist / (np.sum(ref_hist) + 1e-10)
+    gen_norm = gen_hist / (np.sum(gen_hist) + 1e-10)
+
+    # Cosine similarity
+    sim = np.dot(ref_norm, gen_norm) / (
+        np.linalg.norm(ref_norm) * np.linalg.norm(gen_norm) + 1e-10
+    )
+    return float(np.clip(sim, 0.0, 1.0))
 
 
 def _calculate_onset_f1(ref_notes: List[Note], gen_notes: List[Note]) -> float:
