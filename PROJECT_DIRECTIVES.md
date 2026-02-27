@@ -115,6 +115,33 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 | 2 | PYIN + 15초 윈도우 CQT 옥타브 보정 | ❌ 실패 | 0.019 (기준 0.186) | 10개 노트만 감지 — PYIN 신뢰도 너무 낮아 대부분 필터됨, 45.7s |
 | 3 | MELODIA 스타일 Salience 기반 멜로디 추출 | ❌ 실패 | 0.092 (기준 0.186) | 133개 노트만 감지, CQT 12bin/octave 해상도 부족, 6.1s |
 
+## v12 파이프라인 교체 (진행 중, 2026-02-27)
+
+**배경**: 꿈의 버스 pc_f1=0.728이지만 청취상 이상함 (30% 미감지, 14.5% flat bias, 98 FP)
+**근본 원인**: Basic Pitch는 ICASSP 2022 **피아노 전사 모델** → 보컬 timbre에 구조적으로 부적합
+- flat bias: 피아노 배음 구조와 보컬 F0 감지 방식 불일치
+- 반주 잔여음 감지: 폴리포닉 모델이 Demucs 잔여음을 노트로 처리
+**전략**: BP → **보컬 전용 전사 모델**로 교체
+- 후보: VOCANO (ISMIR 2021, 노래 음성 전용 AMT), pesto (2023, 보컬 F0 추정), Omnizart singing mode
+- 이유: 보컬 timbre 기반 훈련 → flat bias 제거, 모노포닉 감지로 FP 감소 기대
+**테스트 기준**: 꿈의 버스 (v10 0.728, 최고) 먼저 — 파이프라인 교체 후 체감 품질 확인
+**베이스라인**: v10 꿈의 버스 0.728 (gen=414, ref=477, 30% 미감지, 14.5% flat bias)
+
+| 순서 | 방법 | 상태 | 꿈의 버스 pc_f1 | 비고 |
+|---|---|---|---|---|
+| 1 | pesto-pitch (ISMIR 2023, MIR-1K 보컬 특화) | ❌ 실패 | 0.637 (기준 0.728) | contour 0.662(-0.14), interval 0.928(-0.06), 150.5s(11x 느림) |
+
+**v12 실패 원인 분석 (2026-02-27)**:
+- pesto는 F0 frame만 출력 → _f0_to_notes() 변환 시 노트 세그멘테이션 품질 저하
+- BP Viterbi는 note onset/offset을 직접 감지 (폴리포닉이지만 경계 정확), pesto는 프레임별 F0만 제공
+- 핵심: 보컬 F0 추적 정확도 ↑ 이더라도, 노트 경계(onset/offset) 감지가 더 중요
+- 처리시간: BP 13s → pesto 150.5s (CQT+sectional offset 계산이 병목)
+- **결론**: F0 정확도보다 노트 세그멘테이션이 pc_f1의 핵심 병목
+
+**다음 방향**: BP 노트 경계는 유지하되 BP 피치를 pesto F0로 교체하는 하이브리드 접근
+- BP onset/offset 감지(강점) + pesto pitch(보컬 특화, 강점) 조합
+- 이유: 두 모델의 강점만 결합, 순수 pesto의 노트 세그멘테이션 약점 회피
+
 ## v11 상위곡 개선 후보 (진행 예정)
 
 **전략**: 최고 성적 곡(꿈의 버스 0.711)부터 개선, 유의미한 개선 시 다음 곡 확장.

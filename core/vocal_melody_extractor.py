@@ -1006,6 +1006,76 @@ def _pyin_pipeline(vocals_f32: np.ndarray, sr: int) -> list[Note]:
     return notes
 
 
+# ── pesto-pitch pipeline ──────────────────────────────────────────────────────
+_PESTO_CONF_THRESH = 0.5   # voiced/unvoiced confidence threshold for pesto
+
+
+def _pesto_f0_extract(
+    vocals_f32: np.ndarray,
+    sr: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Extract F0 using pesto-pitch (vocal-specialised, ISMIR 2023).
+
+    Returns:
+        (f0_hz, conf, times) — same format as _crepe_f0_extract / _pyin_f0_extract.
+        Unvoiced frames have f0_hz=0 and conf=0.
+    """
+    import torch
+    import pesto
+
+    audio = torch.from_numpy(vocals_f32)
+    timesteps, pitch_hz, confidence, _ = pesto.predict(audio, sr)
+
+    f0_hz = pitch_hz.cpu().numpy().astype(np.float32)
+    conf = confidence.cpu().numpy().astype(np.float32)
+    times = timesteps.cpu().numpy().astype(np.float32) / 1000.0  # ms -> seconds
+
+    # Zero out unconfident frames so _f0_to_notes treats them as unvoiced
+    f0_hz = np.where(conf >= _PESTO_CONF_THRESH, f0_hz, 0.0)
+
+    voiced_count = int(np.sum(conf >= _PESTO_CONF_THRESH))
+    logger.info(
+        "pesto F0: %d frames, %d voiced (%.0f%%)",
+        len(f0_hz), voiced_count, 100.0 * voiced_count / max(len(f0_hz), 1),
+    )
+    return f0_hz, conf, times
+
+
+def _vocmodel_pipeline(vocals_f32: np.ndarray, sr: int) -> list[Note]:
+    """Extract monophonic melody via pesto-pitch F0 + windowed CQT octave correction.
+
+    Pipeline:
+        pesto-pitch F0 (vocal-specialised, MIR-1K trained)
+        -> F0 segmentation into Note objects (_f0_to_notes)
+        -> Per-window CQT octave correction (_windowed_cqt_octave_correction)
+
+    Falls back to BP pipeline if pesto-pitch is not installed or fails.
+    """
+    try:
+        f0_hz, conf, times = _pesto_f0_extract(vocals_f32, sr)
+    except ImportError:
+        logger.warning("pesto-pitch not installed, falling back to BP pipeline")
+        return _run_bp_pipeline(vocals_f32, sr)
+    except Exception as e:
+        logger.warning("pesto-pitch failed (%s), falling back to BP pipeline", e)
+        return _run_bp_pipeline(vocals_f32, sr)
+
+    notes = _f0_to_notes(f0_hz, conf, times, conf_thresh=_PESTO_CONF_THRESH)
+    if not notes:
+        logger.warning("pesto pipeline: no notes from F0 track, falling back to BP")
+        return _run_bp_pipeline(vocals_f32, sr)
+
+    sal_w, midi_bins, times_cqt = _compute_cqt_salience(vocals_f32, sr)
+    notes = _windowed_cqt_octave_correction(notes, sal_w, midi_bins, times_cqt)
+
+    logger.info("pesto pipeline: %d final notes", len(notes))
+    return notes
+
+
+# Set to True to use pesto-pitch (vocal-specialised) instead of Basic Pitch
+USE_VOCAL_MODEL = True
+
+
 def extract_melody(
     mp3_path: Path,
     cache_dir: Optional[Path] = None,
@@ -1029,7 +1099,10 @@ def extract_melody(
         List of Note objects representing the extracted melody.
         Returns empty list if no voiced frames are detected.
     """
-    logger.info("extract_melody: starting BP+CQT pipeline for %s", mp3_path)
+    if USE_VOCAL_MODEL:
+        logger.info("extract_melody: starting pesto+CQT pipeline for %s", mp3_path)
+    else:
+        logger.info("extract_melody: starting BP+CQT pipeline for %s", mp3_path)
 
     # Step 1: Separate vocals from the MP3
     vocals, sr = separate_vocals(mp3_path, cache_dir)
@@ -1040,7 +1113,13 @@ def extract_melody(
 
     vocals_f32 = vocals.astype(np.float32)
 
-    # Step 2: Run BP on raw + harmonic vocals, intersect
+    if USE_VOCAL_MODEL:
+        # Step 2 (pesto): pesto F0 -> note segmentation -> windowed CQT octave correction
+        notes = _vocmodel_pipeline(vocals_f32, sr)
+        logger.info("extract_melody: pesto pipeline complete, %d notes", len(notes))
+        return notes
+
+    # Step 2 (BP): Run BP on raw + harmonic vocals, intersect
     bp_notes = _run_bp_pipeline(vocals_f32, sr)
 
     if not bp_notes:
