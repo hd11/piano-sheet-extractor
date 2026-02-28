@@ -92,6 +92,13 @@ def _build_score(
 ) -> music21.stream.Score:
     """Build a music21 Score from Note objects.
 
+    Applies several post-processing steps to produce clean monophonic output:
+    1. Strip leading silence (shift all onsets so melody starts at beat 0)
+    2. Quantize onsets and durations to 16th-note grid
+    3. Deduplicate notes at same onset (keep highest pitch for melody)
+    4. Truncate overlapping durations (monophonic constraint)
+    5. Legato fill: extend notes to cover small gaps
+
     Args:
         notes: List of Note objects.
         title: Score title.
@@ -115,20 +122,101 @@ def _build_score(
     part.append(music21.tempo.MetronomeMark(number=bpm))
     part.append(music21.meter.TimeSignature("4/4"))
 
-    # Convert each Note to a music21 note and insert at correct offset
+    if not notes:
+        score.append(part)
+        return score
+
+    # --- Step 1: Strip leading silence ---
+    first_onset = min(n.onset for n in notes)
+    if first_onset > 0.1:  # more than 100ms of leading silence
+        notes = [
+            Note(pitch=n.pitch, onset=n.onset - first_onset,
+                 duration=n.duration, velocity=n.velocity)
+            for n in notes
+        ]
+
+    # --- Step 2: Remove isolated notes (large jump from both neighbors) ---
+    # Vocal melodies rarely have >7 semitone jumps; isolated jumps are errors
+    if len(notes) >= 3:
+        cleaned = [notes[0]]
+        for i in range(1, len(notes) - 1):
+            jump_before = abs(notes[i].pitch - notes[i - 1].pitch)
+            jump_after = abs(notes[i].pitch - notes[i + 1].pitch)
+            if jump_before > 7 and jump_after > 7:
+                continue  # skip isolated note
+            cleaned.append(notes[i])
+        cleaned.append(notes[-1])
+        notes = cleaned
+
+    # --- Step 3: Merge consecutive same-pitch notes (pre-quantization) ---
+    # BP often splits one sustained note into multiple short notes
+    merged_notes: List[Note] = [notes[0]]
+    for i in range(1, len(notes)):
+        prev = merged_notes[-1]
+        curr = notes[i]
+        gap = curr.onset - (prev.onset + prev.duration)
+        if curr.pitch == prev.pitch and gap < 0.15:  # same pitch, gap < 150ms
+            # Merge: extend previous note to cover current
+            new_dur = (curr.onset + curr.duration) - prev.onset
+            merged_notes[-1] = Note(
+                pitch=prev.pitch, onset=prev.onset,
+                duration=new_dur, velocity=prev.velocity,
+            )
+        else:
+            merged_notes.append(curr)
+    notes = merged_notes
+
+    # --- Step 4: Quantize to 16th-note grid ---
+    # Each entry: [onset_q, dur_q, pitch, velocity]
+    quantized = []
     for n in notes:
-        # Convert seconds to quarter-note units
-        onset_quarters = n.onset / seconds_per_quarter
-        duration_quarters = n.duration / seconds_per_quarter
+        onset_q = round(n.onset / seconds_per_quarter * 4) / 4
+        dur_q = _quantize_to_16th(n.duration / seconds_per_quarter)
+        quantized.append([onset_q, dur_q, n.pitch, n.velocity])
 
-        # Quantize to 16th-note grid
-        quantized_onset = round(onset_quarters * 4) / 4
-        quantized_duration = _quantize_to_16th(duration_quarters)
+    # --- Step 5: Sort by onset, then pitch descending (melody = top note) ---
+    quantized.sort(key=lambda x: (x[0], -x[2]))
 
-        m21_note = music21.note.Note(n.pitch, quarterLength=quantized_duration)
-        m21_note.volume.velocity = n.velocity
+    # --- Step 6: Deduplicate same-onset notes (monophonic melody) ---
+    deduped = []
+    for q in quantized:
+        if deduped and abs(q[0] - deduped[-1][0]) < 0.01:
+            continue  # same onset position: keep earlier (higher pitch)
+        deduped.append(q)
 
-        part.insert(quantized_onset, m21_note)
+    # --- Step 7: Truncate overlapping durations ---
+    for i in range(len(deduped) - 1):
+        gap = deduped[i + 1][0] - deduped[i][0]
+        if gap > 0 and deduped[i][1] > gap:
+            deduped[i][1] = gap  # trim to not overlap next note
+
+    # --- Step 8: Legato fill — extend notes to cover small gaps ---
+    for i in range(len(deduped) - 1):
+        note_end = deduped[i][0] + deduped[i][1]
+        next_onset = deduped[i + 1][0]
+        gap = next_onset - note_end
+        if 0 < gap <= 0.5:  # gap ≤ half a beat: fill it
+            deduped[i][1] = next_onset - deduped[i][0]
+
+    # --- Step 9: Merge consecutive same-pitch notes (post-quantization) ---
+    # After legato fill, adjacent same-pitch notes should become one
+    final = [deduped[0]]
+    for i in range(1, len(deduped)):
+        prev = final[-1]
+        curr = deduped[i]
+        prev_end = prev[0] + prev[1]
+        if curr[2] == prev[2] and abs(prev_end - curr[0]) < 0.01:
+            # Same pitch and adjacent: merge
+            final[-1] = [prev[0], curr[0] + curr[1] - prev[0], prev[2], prev[3]]
+        else:
+            final.append(curr)
+    deduped = final
+
+    # --- Insert into part ---
+    for onset_q, dur_q, pitch, vel in deduped:
+        m21_note = music21.note.Note(pitch, quarterLength=dur_q)
+        m21_note.volume.velocity = vel
+        part.insert(onset_q, m21_note)
 
     # Create measures with bar lines
     part.makeMeasures(inPlace=True)

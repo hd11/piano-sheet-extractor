@@ -29,7 +29,11 @@ def compare_melodies(ref_notes: List[Note], gen_notes: List[Note]) -> dict:
     if not ref_notes or not gen_notes:
         return {
             "pitch_class_f1": 0.0,
+            "pitch_class_precision": 0.0,
+            "pitch_class_recall": 0.0,
             "chroma_similarity": 0.0,
+            "contour_similarity": 0.0,
+            "pitch_class_match_rate": 0.0,
             "melody_f1_strict": 0.0,
             "melody_f1_lenient": 0.0,
             "onset_f1": 0.0,
@@ -41,7 +45,7 @@ def compare_melodies(ref_notes: List[Note], gen_notes: List[Note]) -> dict:
     gen_intervals, gen_pitches_hz = _notes_to_mir_eval(gen_notes)
 
     # Calculate pitch_class_f1 (PRIMARY METRIC - octave-agnostic)
-    pitch_class_f1 = _calculate_pitch_class_f1(ref_notes, gen_notes)
+    pitch_class_metrics = _calculate_pitch_class_f1(ref_notes, gen_notes)
 
     # Calculate chroma_similarity
     chroma_similarity = _calculate_chroma_similarity(ref_notes, gen_notes)
@@ -69,16 +73,22 @@ def compare_melodies(ref_notes: List[Note], gen_notes: List[Note]) -> dict:
     # Calculate onset_f1 (pitch ignored)
     onset_f1 = _calculate_onset_f1(ref_notes, gen_notes)
 
-    # Calculate melody contour similarity (pattern-based, not note-count dependent)
+    # Calculate melody contour similarity (direction-based: up/down/same)
     contour_similarity = _calculate_contour_similarity(ref_notes, gen_notes)
+
+    # Calculate pitch class match rate (old contour metric, renamed)
+    pitch_class_match_rate = _calculate_pitch_class_match_rate(ref_notes, gen_notes)
 
     # Calculate interval pattern similarity
     interval_similarity = _calculate_interval_similarity(ref_notes, gen_notes)
 
     return {
-        "pitch_class_f1": pitch_class_f1,
+        "pitch_class_f1": pitch_class_metrics["f1"],
+        "pitch_class_precision": pitch_class_metrics["precision"],
+        "pitch_class_recall": pitch_class_metrics["recall"],
         "chroma_similarity": chroma_similarity,
         "contour_similarity": contour_similarity,
+        "pitch_class_match_rate": pitch_class_match_rate,
         "interval_similarity": interval_similarity,
         "melody_f1_strict": melody_f1_strict,
         "melody_f1_lenient": melody_f1_lenient,
@@ -105,14 +115,17 @@ def _notes_to_mir_eval(notes: List[Note]) -> tuple:
     return intervals, pitches_hz
 
 
-def _calculate_pitch_class_f1(ref_notes: List[Note], gen_notes: List[Note]) -> float:
-    """Calculate octave-agnostic F1 score (PRIMARY METRIC).
+def _calculate_pitch_class_f1(ref_notes: List[Note], gen_notes: List[Note]) -> dict:
+    """Calculate octave-agnostic precision, recall, and F1 score (PRIMARY METRIC).
 
     Normalizes all pitches to octave 5 (60 + (pitch % 12)) before comparison.
     Uses 200ms onset tolerance.
+
+    Returns:
+        dict with keys: precision, recall, f1
     """
     if not ref_notes or not gen_notes:
-        return 0.0
+        return {"precision": 0.0, "recall": 0.0, "f1": 0.0}
 
     # Normalize pitches to octave 5 (60-71)
     ref_intervals = np.array([[n.onset, n.onset + n.duration] for n in ref_notes])
@@ -135,7 +148,7 @@ def _calculate_pitch_class_f1(ref_notes: List[Note], gen_notes: List[Note]) -> f
         offset_ratio=None,
     )
 
-    return float(f1)
+    return {"precision": float(precision), "recall": float(recall), "f1": float(f1)}
 
 
 def _calculate_chroma_similarity(ref_notes: List[Note], gen_notes: List[Note]) -> float:
@@ -197,12 +210,12 @@ def _calculate_melody_f1(
     return float(f1)
 
 
-def _calculate_contour_similarity(ref_notes: List[Note], gen_notes: List[Note]) -> float:
-    """Calculate melody contour similarity via time-quantized pitch correlation.
+def _calculate_pitch_class_match_rate(ref_notes: List[Note], gen_notes: List[Note]) -> float:
+    """Calculate pitch class match rate via time-quantized pitch class comparison.
 
-    Converts both melodies to dense pitch contours (50ms steps), then computes
-    Pearson correlation. This captures whether the melodies go up/down at the
-    same times, regardless of exact note boundaries or note counts.
+    Converts both melodies to dense pitch class contours (50ms steps), then
+    computes fraction of time steps where pitch classes match. This is the
+    original contour_similarity metric, renamed for clarity.
     """
     if not ref_notes or not gen_notes:
         return 0.0
@@ -241,6 +254,62 @@ def _calculate_contour_similarity(ref_notes: List[Note], gen_notes: List[Note]) 
     # Compute fraction of time steps with matching pitch class
     match_rate = float(np.mean(rc == gc))
     return match_rate
+
+
+def _calculate_contour_similarity(ref_notes: List[Note], gen_notes: List[Note]) -> float:
+    """Calculate melodic direction similarity.
+
+    Measures whether both melodies go up/down/same at the same times.
+    Uses full MIDI pitch (not pitch class) at 50ms time steps.
+    Computes sign(pitch[t] - pitch[t-1]) for direction, then compares.
+    """
+    if not ref_notes or not gen_notes:
+        return 0.0
+
+    step = 0.05  # 50ms
+    t_start = min(ref_notes[0].onset, gen_notes[0].onset)
+    t_end = max(ref_notes[-1].onset + ref_notes[-1].duration,
+                gen_notes[-1].onset + gen_notes[-1].duration)
+    if t_end <= t_start:
+        return 0.0
+
+    times = np.arange(t_start, t_end, step)
+    if len(times) < 10:
+        return 0.0
+
+    def _to_pitch_contour(notes: List[Note]) -> np.ndarray:
+        """Convert notes to MIDI pitch contour at each time step."""
+        contour = np.full(len(times), np.nan)
+        for n in notes:
+            mask = (times >= n.onset) & (times < n.onset + n.duration)
+            contour[mask] = n.pitch  # Full MIDI pitch, NOT % 12
+        return contour
+
+    ref_contour = _to_pitch_contour(ref_notes)
+    gen_contour = _to_pitch_contour(gen_notes)
+
+    def _to_direction(contour: np.ndarray) -> np.ndarray:
+        """Compute direction at each step: +1 up, -1 down, 0 same."""
+        direction = np.full(len(contour), np.nan)
+        prev_valid = np.nan
+        for i in range(len(contour)):
+            if np.isnan(contour[i]):
+                continue
+            if not np.isnan(prev_valid):
+                diff = contour[i] - prev_valid
+                direction[i] = np.sign(diff)
+            prev_valid = contour[i]
+        return direction
+
+    ref_dir = _to_direction(ref_contour)
+    gen_dir = _to_direction(gen_contour)
+
+    # Compare where both have valid directions
+    valid = ~np.isnan(ref_dir) & ~np.isnan(gen_dir)
+    if np.sum(valid) < 10:
+        return 0.0
+
+    return float(np.mean(ref_dir[valid] == gen_dir[valid]))
 
 
 def _calculate_interval_similarity(ref_notes: List[Note], gen_notes: List[Note]) -> float:

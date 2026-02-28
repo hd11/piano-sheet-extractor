@@ -154,6 +154,220 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 - **다음 방향**: 꿈의 버스 contour 오류 패턴 분석 — 어떤 구간에서 방향이 틀리는지 파악
   - 이유: interval/chroma 개선은 여지 없음, contour 개선이 pc_f1 상승의 유일한 경로
 
+**v13 진단 보강 (2026-02-27) — precision/recall 분리**:
+- comparator.py에 pitch_class_precision, pitch_class_recall 추가
+- 꿈의 버스 결과: **precision=0.781, recall=0.667**, f1=0.719 (gen=407, ref=477)
+- 핵심: precision(0.781) >> recall(0.667) → 파이프라인은 보수적 (생성 노트는 대부분 정확, 미감지가 문제)
+- 절대명제 2번 확인: precision이 recall보다 높음 — 방향은 맞으나 recall 갭(0.667)이 f1을 끌어내림
+- **contour_similarity 지표 오류 발견**: 코드 확인 결과 `np.mean(rc == gc)` = pitch class 일치율이지 멜로디 방향 유사도가 아님. docstring과 실제 구현 불일치.
+- **ROSVOT (ACL 2024) 테스트 결과 (2026-02-27)**:
+  - ROSVOT raw: pc_f1=0.483, precision=0.480, recall=0.486, gen=483, onset_f1=0.433
+  - BP baseline: pc_f1=0.728, precision=0.781, recall=0.667, gen=407 (=413 이전 측정과 약간 차이)
+  - **핵심 발견**: ROSVOT avg pitch=64.4 vs ref=76.9 → 정확히 1옥타브 낮음 (subharmonic)
+  - ROSVOT gen=483 ≈ ref=477 → **노트 수 감지 능력은 BP(413)보다 우수**
+  - chroma=0.989, interval=0.981 → 멜로디 윤곽/음정은 매우 정확
+  - melody_f1_lenient=0.000 → 옥타브 오류로 절대 피치 완전 틀림
+  - **+12 보정 결과**: pc_f1 변화 없음 (0.483) — pitch_class_f1은 mod 12이므로 옥타브 무관
+  - melody_f1_lenient: 0.000→0.483 (옥타브 보정으로 절대 피치 정상화)
+  - **결론: ROSVOT 실패** — pc_f1=0.483 << BP=0.728. 노트 수는 좋으나(483≈477) pitch class 자체 정확도가 낮음(precision=0.480)
+  - 원인: Mandarin 훈련 모델의 한국어 보컬 적용 한계 + Demucs 잔여음에 취약
+  - ROSVOT의 노트 감지 수(483)는 우수 → onset 감지력은 좋으나 pitch 추정이 부정확
+
+| 모델 | pc_f1 | precision | recall | gen | 비고 |
+|---|---|---|---|---|---|
+| BP baseline | **0.728** | **0.781** | **0.667** | 407 | 피아노 모델이지만 pitch 정확 |
+| ROSVOT | 0.483 | 0.480 | 0.486 | 483 | 노트 수 좋으나 pitch 부정확 |
+| pesto | 0.637 | - | - | - | v12에서 실패 |
+| CREPE | 0.633 | - | - | - | v11에서 실패 |
+
+  - **다음 방향**: Omnizart vocal 또는 Phoneme-Informed(ICASSP 2023) 시도, 또는 BP 유지하고 recall 개선 전략 전환
+  - 이유: 보컬 전용 모델 3개(pesto, CREPE, ROSVOT) 모두 BP 미달 → BP의 pitch 정확도가 현재 최선일 가능성. recall(0.667) 개선이 핵심 과제
+
+**v13 contour 지표 수정 (2026-02-27)**:
+- 기존 `contour_similarity`는 pitch class 일치율이었음 → `pitch_class_match_rate`로 재명명
+- 새 `contour_similarity` 구현: 50ms 스텝에서 멜로디 방향(sign(Δpitch)) 일치율
+  - full MIDI pitch 사용 (pitch class 아님), 방향 = {+1: 상승, -1: 하강, 0: 유지}
+- 꿈의 버스 결과:
+  - **contour_similarity (방향 일치율)**: 0.802 → 80.2% 시간에 멜로디가 같은 방향으로 움직임
+  - **pitch_class_match_rate (기존)**: 0.753
+  - pc_f1: 0.719 (변경 없음, 파이프라인 무결성 확인)
+- 해석: 방향은 80% 맞지만 20%가 틀림. 이 20%가 어떤 패턴인지 분석하면 개선 방향 도출 가능
+
+**v13 contour 오류 패턴 분석 (2026-02-27)**:
+- 실제 contour_similarity: 0.867 (후처리 적용 시), 오류 226개/1704 스텝 = 13.3%
+- **Confusion matrix** (ref→gen 방향):
+  - DOWN→SAME: 67 (29.6%) | UP→SAME: 67 (29.6%) → **방향 평탄화 59.2%**
+  - SAME→UP: 48 (21.2%) | SAME→DOWN: 40 (17.7%) → 허위 방향 38.9%
+  - UP↔DOWN 완전 반전: 4건(1.8%)만 → 심각한 반전 오류는 거의 없음
+- **근본 원인 1 — 노트 세그멘테이션 (59%)**: gen이 UP/DOWN을 SAME으로 감지
+  - BP가 더 적고 긴 노트 생성(407 vs 477) → ref의 방향 전환이 gen에서 sustain으로 합쳐짐
+  - 핵심: pitch가 아닌 **노트 경계(onset/offset) 감지**가 contour 오류의 주원인
+- **근본 원인 2 — onset 경계 효과 (77%)**: 오류의 77%(174/226)가 onset 50ms 이내에 집중
+  - onset zone(0-50ms) 오류율 38.5% vs sustain zone(50-150ms) 3.2% → 12배 차이
+  - 노트 전환 지점에서 방향 벡터가 불안정
+- **근본 원인 3 — flat bias (23%)**: -1/-2 반음이 방향 오류 유발
+  - SAME→DOWN 28건, UP→SAME 17건 등
+  - 하지만 전체 오류의 23%에 불과 → 주원인 아님
+- **delta=0 오류 (55.8%)**: gen pitch = ref pitch인데 방향이 다름 → 순수 타이밍/경계 문제
+- 시간/피치 범위별로는 고르게 분포 (특정 구간 집중 없음)
+
+**결론**: contour 오류의 핵심은 **pitch 부정확이 아니라 노트 세그멘테이션**
+- BP가 477개 중 70개를 미감지 → 방향 전환점이 사라짐
+- onset 경계에서 38.5% 오류 → 노트 전환 타이밍 정밀도 개선 필요
+- ~~다음 방향: BP recall 개선~~ → **실패, 아래 참조**
+
+**v13 recall 개선 실험 (2026-02-27) — 전부 실패**:
+- **핵심 발견: BP는 노트를 합치는 게 아니라 아예 미감지**
+  - BP median duration=0.209s < ref median=0.333s → BP가 오히려 더 짧은 노트 생성
+  - 70개 missing notes는 complete false negatives (분할로 복구 불가)
+
+| 실험 | pc_f1 | precision | recall | gen | 판정 |
+|---|---|---|---|---|---|
+| baseline | 0.720 | 0.781 | 0.667 | 407 | — |
+| onset split (delta=0.1) | 0.703 | 0.720 | 0.686 | 454 | ❌ prec↓ |
+| onset split (oracle) | 0.718 | 0.727 | 0.709 | 465 | ❌ oracle도 실패 |
+| min_note 100ms | 0.715 | 0.732 | 0.698 | 455 | ❌ prec↓ |
+| min_note 80ms | 0.697 | 0.673 | 0.723 | 513 | ❌ prec 폭락 |
+
+- oracle splitting조차 baseline 미달 → 분할 접근 자체가 무효
+- **결론**: BP+CQT 꿈의 버스 pc_f1 ceiling ≈ **0.72**
+- precision 유지하면서 recall 개선하는 후처리 방법 없음
+- **다음 방향 후보**:
+  - A: 보컬 분리 품질 개선 (Demucs 잔여음이 FN 원인일 경우)
+  - B: BP confidence 기반 선택적 노트 추가 → **아래 결과 참조**
+  - C: 앙상블 (BP + 다른 detector union, precision 필터링)
+  - D: 0.72를 현 파이프라인 상한으로 수용하고 다른 곡으로 이동
+
+**v13 gap-fill 실험 (2026-02-28) — 소폭 개선 (+0.018)**:
+- predict() raw posterior 분석: gap 구간 38.1%, gap의 61.7%에서 vocal-range activation > 0.30
+- BP가 신호를 감지하지만 raw∩harmonic intersection에서 제거됨 (gap-fill 근거 확인)
+- 122 FNs 중 54개(44%)가 gap 구간, 68개(56%)가 non-gap(pitch 오류) → gap-fill로 절반만 커버 가능
+
+| 설정 | pc_f1 | precision | recall | gen | 판정 |
+|---|---|---|---|---|---|
+| baseline | 0.720 | 0.781 | 0.667 | 407 | — |
+| gap-fill (amp≥60, dur≥130ms) | **0.737** | **0.771** | **0.707** | 437 | ✅ **채택 가능** |
+| gap-fill (amp≥50) | 0.728 | 0.730 | — | — | ❌ prec<0.75 |
+| frame=0.20 전역 적용 | 0.672 | — | — | 562 | ❌ FP 폭증 |
+
+- 최적 설정: onset=0.35, frame=0.15로 재실행 → gap 구간만 → velocity≥60 AND duration≥130ms
+- 30 candidates 중 19 TPs(63%), 11 FPs(37%)
+- duration이 TP/FP 최고 구분자 (TP avg 158ms vs FP avg 123ms)
+- **precision 0.771 (≥0.75 유지) ✓, recall +0.040 개선**
+- 한계: +0.018로는 0.90에 크게 부족. 68 non-gap FNs(pitch 오류)가 더 큰 기회
+
+**gap-fill 파이프라인 통합 완료 (2026-02-28)**:
+- vocal_melody_extractor.py에 _gap_fill_notes() 추가
+- predict() 3회: raw(main) + harmonic(main) + raw(gap-fill, onset=0.35/frame=0.15/min=80ms)
+- gap 구간에서 velocity≥60, duration≥130ms 필터 적용
+- 결과: pc_f1=0.735, precision=0.770, recall=0.702 (처리시간 35s)
+
+**non-gap FN pitch 보정 실험 (2026-02-28) — 실패**:
+- non-gap FN 75개 중 flat bias(-1/-2)가 52%(39개)로 지배적
+- oracle 보정(ref 지식 사용): pc_f1 0.720→0.767 (+0.047) — 이론적 상한
+- CQT 기반 선택적 보정: 21가지 조합 전부 실패 (최선 0.710, -0.009)
+- 실패 원인: CQT ratio로 flat-bias 노트 식별 시 TP 70-76%가 오탐
+- "Correct PC stolen" 21개(28%)는 timing mismatch → alignment 개선으로 회수 가능
+- **결론**: flat bias는 실재하지만 ref 없이는 감지 불가
+
+**v13 꿈의 버스 최종 현황**:
+- 확정: pc_f1=**0.735** (gap-fill 통합)
+- 이론적 상한(oracle flat-bias fix): ~0.78
+- BP+CQT 파이프라인 ceiling: **~0.78** (0.90 도달 불가)
+- ~~다음 방향: 근본적 파이프라인 교체 검토~~ → **전 모델 테스트 완료, BP가 최선**
+
+**v14 보컬 전사 모델 전수 테스트 (2026-02-28) — 전부 BP 미달**:
+
+| 모델 | pc_f1 | precision | recall | gen | 비고 |
+|---|---|---|---|---|---|
+| **BP+gap-fill (현재)** | **0.735** | **0.770** | **0.702** | 437 | 최선 |
+| pesto (v12) | 0.637 | - | - | - | F0 frame만, 노트 세그멘테이션 부족 |
+| CREPE (v11) | 0.633 | - | - | - | CQT 보정이 pitch 악화 |
+| ROSVOT (ACL 2024) | 0.483 | 0.480 | 0.486 | 483 | 노트 수 좋으나 pitch 부정확 |
+| Omnizart vocal | 0.458 | 0.428 | 0.493 | 414 | 1옥타브 낮음, 구 모델 |
+| Phoneme-Informed (ICASSP 2023) | 0.294 | 0.347 | 0.256 | 352 | 가사 정보 없이 사용 → 성능 저조 |
+
+- **결론**: 보컬 전용 모델 5개(pesto, CREPE, ROSVOT, Omnizart, Phoneme-Informed) 전부 BP 미달
+- BP(피아노 전사 모델)가 Demucs 보컬에서 pitch 정확도 최고 — 역설적이지만 사실
+- 보컬 모델들의 공통 문제: 서브하모닉 잠금, Demucs 잔여음에 취약
+- **BP+CQT+gap-fill이 현재 최선 파이프라인으로 확정**
+- 꿈의 버스 ceiling: ~0.78 (oracle), 현재 0.735
+- **다음 방향**:
+  - ~~A: 전곡 평가로 gap-fill의 다른 곡 효과 확인 (v10 0.583 → v13 얼마?)~~
+  - ~~B: Demucs 보컬 분리 품질 자체를 개선~~ → **실패, 아래 참조**
+  - ~~C: 0.735를 현 기술 상한으로 수용, 다른 연구 방향 모색~~
+
+**v15 Demucs 보컬 분리 개선 실험 (2026-02-28) — 전부 무의미**:
+
+| 전략 | pc_f1 | precision | recall | gen | delta |
+|---|---|---|---|---|---|
+| **Baseline (htdemucs_ft)** | **0.735** | **0.770** | **0.702** | 435 | — |
+| shifts=5 (앙상블 평균) | 0.730 | 0.757 | 0.704 | 444 | -0.005 |
+| Two-pass Demucs (2회 분리) | 0.737 | 0.768 | 0.709 | 440 | +0.003 |
+| mdx_extra 모델 | 0.736 | 0.771 | 0.704 | 436 | +0.001 |
+| HPSS margin=8 (공격적 하모닉) | 0.710 | 0.762 | 0.665 | 416 | -0.025 |
+| Spectral gate p30 | 0.736 | 0.768 | 0.707 | 439 | +0.001 |
+| Spectral gate p50 | 0.738 | 0.773 | 0.707 | 436 | +0.004 |
+
+- **결론**: 6가지 전략 모두 noise 범위 내 (최선 +0.004). **보컬 분리 품질은 병목이 아님**
+- shifts=5: 3배 느림에도 precision 하락 → 앙상블이 onset transient 흐림
+- HPSS: 보컬 하모닉과 반주 하모닉 구분 불가 → 보컬까지 제거, recall 폭락
+- Two-pass/MDX/Spectral gate: 미미한 차이 → Demucs 잔여 반주는 BP 성능의 주원인이 아님
+- **핵심 발견**: 병목은 Demucs가 아니라 BP 노트 감지 자체. 122 FN 중 대부분은 BP가 보컬 신호를 감지하지 못하는 것
+- **꿈의 버스 최종 결론**: BP+CQT+gap-fill pc_f1=0.735가 현재 기술 상한
+  - 보컬 전사 모델 5개 전부 BP 미달 (v14)
+  - Demucs 개선 6가지 전부 무의미 (v15)
+  - BP 파라미터 튜닝 9가지 전부 실패 (v11)
+  - Recall 개선 실험 4가지 전부 실패 (v13)
+  - CQT pitch 보정 21가지 전부 실패 (v13)
+  - 파운데이션 모델 2개 추가 테스트 전부 실패 (v16)
+  - **총 47회 실험 → 0.735 이상 도달 불가 확인**
+
+**v16 파운데이션 모델 탐색 (2026-02-28) — 실패**:
+
+| 모델 | pc_f1 | precision | recall | gen | 비고 |
+|---|---|---|---|---|---|
+| **BP+gap-fill (현재)** | **0.735** | **0.770** | **0.702** | 437 | 최선 |
+| SOME v1.0 (OpenVPI) | 0.725 | 0.738 | 0.713 | 461 | 보컬→MIDI 전용, -1옥타브 서브하모닉, -2반음 flat bias 11.1% |
+| YourMT3+ (2024) | N/A | N/A | N/A | N/A | 소스코드 미공개 (LICENSE+README만 존재) |
+
+- SOME: recall은 0.713(BP 0.702보다 약간 좋음)이지만 precision 0.738로 부족
+- SOME mean pitch=63.9 vs ref=76.9 → 동일한 서브하모닉 잠금 문제
+- SOME +12 보정 후 67.4% 정확, 89.1% ±2반음 이내
+- **결론**: 보컬 전용 모델(SOME)도 Demucs 보컬에서 서브하모닉 잠금 발생. BP가 여전히 최선
+- 조사한 모델 전체: BP, pesto, CREPE, ROSVOT, Omnizart, Phoneme-Informed, SOME — **7개 모델 중 BP가 최고**
+- **0.735가 현재 가용 기술의 꿈의 버스 상한으로 최종 확정**
+
+**다음 방향**: ~~A/B 선택~~ → **v17: 근본 설계 재검토 (아래 참조)**
+
+---
+
+**v17 근본 설계 결함 발견 (2026-02-28) — 평가≠출력 괴리**:
+
+- **증상**: MusicXML 출력을 재생하면 알 수 없는 노래. 사용자 체감 0.1 수준.
+- **원인**: evaluate.py는 참조 기반 후처리(시간 정렬+옥타브 보정) 적용 후 비교, extract_melody.py는 미적용
+- **실제 출력 pc_f1 = 0.311** (0.735가 아님). mel_f1_strict = 0.070 (0.279가 아님)
+- **세부 원인**:
+  1. 시간 오프셋: 추출 노트가 ~5.6초 늦게 시작, 구간별 -0.24~-0.40s 드리프트 존재 → evaluate.py만 보정
+  2. 옥타브 오류: 62/435 노트(14.3%)가 잘못된 옥타브 → pc_f1(mod 12)에 안 보임
+  3. 지표 괴리: pc_f1은 옥타브 무시+200ms 허용 → 청취 품질과 무관
+- **결론**: v11~v16의 47회 실험은 **참조 정렬 후 옥타브-무관 지표**를 최적화 → 실제 출력 품질 개선과 무관했음
+- **방향 전환**: 초기 설계부터 재검토. 실제 MusicXML 재생 품질을 기준으로 파이프라인 재설계
+
+**v17 수정 1: self-referencing 옥타브 보정 (2026-02-28)**:
+- 기존: `_determine_octave_shift()`로 전역 shift만 → 14.3% 노트 잘못된 옥타브
+- 수정: `_per_note_octave_correction()` 추가 — pitch class별 다수결로 이상치 교정
+- 결과: oct5 69→47, oct6 356→388 (REF: oct5=60, oct6=400)
+- **참조 없이 참조 기반 보정과 동일 mel_f1_lenient=0.643 달성**
+- evaluate.py에서 `apply_octave_correction(gen, ref)` 제거 — 파이프라인 자체가 보정
+- 평가와 출력 정합성 확보 (evaluate.py가 보는 노트 = MusicXML 노트)
+
+**v17 남은 과제**:
+- RAW mel_f1_lenient=0.285 (시간 정렬 없이) → 시간 오프셋 5.6초가 지표에 영향
+- MusicXML 재생 시 멜로디 자체는 정확하나, 인트로 무음(~4마디) 후 시작
+- mel_f1_lenient(aligned)=0.643 → 36%가 여전히 pitch 오류 (flat bias + missing notes)
+- 주 지표를 pc_f1 → mel_f1_lenient로 전환 검토 중
+
 ## v11 상위곡 개선 후보 (진행 예정)
 
 **전략**: 최고 성적 곡(꿈의 버스 0.711)부터 개선, 유의미한 개선 시 다음 곡 확장.
@@ -256,6 +470,138 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 **다음 방향**: 추출 파이프라인 개선 (노트 수 gap 해소, IRIS OUT/비비드 구조적 문제)
 - 현재 v10 평균 0.583 → 목표 0.90까지 +0.317 추가 개선 필요
 - 남은 주요 bottleneck: IRIS OUT(0.219), 비비드(0.355), 너에게100퍼센트(0.703 달성 후 더 개선 여지 있음)
+
+---
+
+### v18 (2026-02-28) — MusicXML 출력 품질 수정 (**진행 중**)
+
+**베이스라인**: v17 MusicXML 사용자 체감 0.11 수준 (알 수 없는 노래)
+
+**문제 진단** (v17):
+- evaluate.py는 `apply_octave_correction(gen, ref)` + `apply_sectional_time_offset(gen, ref)` 적용 → pc_f1=0.735
+- extract_melody.py는 둘 다 미적용 → **실제 MusicXML pc_f1=0.311** (괴리 0.424)
+- 47회 실험이 모두 evaluate.py 기준 최적화 — 실제 출력과 무관하게 진행됨
+- mel_f1_strict(옥타브 민감, 50ms)=0.070 → 사용자 체감 0.1과 일치
+
+**v17 수정** (자기참조 옥타브 보정):
+- `_per_note_octave_correction()`: pitch class별 다수결 → 옥타브 이탈 노트 보정
+- evaluate.py에서 `apply_octave_correction(gen, ref)` 제거
+- 결과: ALIGNED mel_f1_lenient 0.643 유지 (참조 기반과 동등)
+- **사용자 피드백: "아직도 이상해 0.11" — 개선 불충분**
+
+**v17 심층 진단** (사용자 피드백 후):
+1. 리딩 사일런스 5.9s → MusicXML 첫 4마디가 빈 쉼표
+2. 양자화 후 41/434 노트 겹침 → 의도치 않은 화음
+3. GEN 노트 길이 중앙값 197ms vs REF 333ms → 뚝뚝 끊기는 스타카토
+4. 첫 20개 REF 노트(0.33s-5.67s)에 GEN 매칭 없음 → 인트로 누락
+
+**v18 수정** (`core/musicxml_writer.py` `_build_score()` 개선):
+1. **리딩 사일런스 제거**: 첫 노트 onset을 0으로 이동 (5.9s → 0s)
+2. **겹침 제거**: 같은 onset 위치 중복 노트 제거 (435→434 노트, 최고음 유지)
+3. **겹침 트리밍**: 노트 duration이 다음 노트 onset 넘으면 잘라냄 (41→0 겹침)
+4. **레가토 채움**: 노트 끝~다음 노트 시작 gap ≤ 0.5 beat이면 채움 (중앙값 197→253ms)
+
+**v18 결과** (꿈의 버스):
+- MusicXML 노트: 434 (겹침 1개 제거)
+- 겹침: 41→0
+- 노트 길이: 중앙값 197→253ms (quarters: 0.75)
+- 첫 노트: offset 0.00q (이전: measure 5, beat 2.5)
+- 평가 지표 (파이프라인 품질 동일): ALIGNED pc_f1=0.735, mel_f1_lenient=0.643
+- **MusicXML 출력 파일**: `/mnt/d/piano-sheet-output/꿈의 버스_v18.musicxml`
+- **v19로 대체됨**
+
+### v19 (2026-02-28) — MusicXML 노트 정리 (고립 제거 + 동일 피치 병합)
+
+**베이스라인**: v18 (434노트, 중앙값 253ms, 큰 점프 54개)
+
+**추가 분석**:
+- 110개 연속 동일 피치 노트 (gap<150ms) → BP가 하나의 노트를 잘못 분리
+- 18개 고립 노트 (양쪽 neighbor와 >7반음 차이) → 옥타브/피치 점프 오류
+- 피치 클래스 분포: GEN vs REF 매우 유사 (A major 키, out-of-key 21개 중 대부분 정당한 임시표)
+- 스케일 양자화는 효과 미미 (실제 오류 ~5개뿐)
+
+**수정** (`core/musicxml_writer.py` `_build_score()` 추가 단계):
+1. **고립 노트 제거**: 양쪽 neighbor와 >7반음 차이 → 제거 (18개)
+2. **동일 피치 병합 (양자화 전)**: gap<150ms 연속 동일 피치 → 하나로 합침
+3. **동일 피치 병합 (양자화 후)**: 레가토 채움 후 인접 동일 피치 → 합침
+
+**v19 결과** (꿈의 버스):
+- 노트 수: 435 → **299** (136개 제거/병합)
+- 노트 길이: 중앙값 197ms → **337ms** (REF 333ms와 거의 동일!)
+- 노트 길이 (quarters): 중앙값 0.75 → **1.00** (= 4분음표)
+- 큰 점프 (>7반음): 54 → **24** (56% 감소)
+- 겹침: 0
+- 평가 지표: ALIGNED pc_f1=0.735, mel_f1_lenient=0.643 (파이프라인 품질 동일)
+- contour_similarity=0.807 (멜로디 윤곽 80% 정확)
+- **MusicXML 출력 파일**: `/mnt/d/piano-sheet-output/꿈의 버스_v19.musicxml`
+
+**v17→v19 개선 요약**:
+| 항목 | v17 | v19 | 변화 |
+|---|---|---|---|
+| 리딩 사일런스 | 5.9s (4마디 빈 쉼표) | 0s | 완전 제거 |
+| 겹침 노트 | 41/434 | 0/299 | 완전 제거 |
+| 노트 수 | 435 | 299 | -31% (병합) |
+| 노트 길이 중앙값 | 197ms | 337ms (≈REF) | +71% |
+| 큰 점프 (>7) | 54 | 24 | -56% |
+| 고립 노트 | 18 | 0 | 완전 제거 |
+
+**남은 근본 문제**: 36% 노트 피치 오류 (mel_f1_lenient=0.643 aligned)
+- 피치 클래스 분포는 REF와 유사 → 오류는 타이밍+옥타브에 집중
+- MusicXML writer 수준 개선 한계 도달
+- **다음 방향**: 사용자 청취 피드백 기반 판단. 추가 고려: extractor 레벨 멜로디 스무딩, 또는 핵심 파이프라인 변경
+
+---
+
+### v20 (2026-02-28) — CREPE Q75 피치 보정 + 4-estimator 실증 + MusicXML 평가 아티팩트 발견
+
+**베이스라인**: v19 꿈의 버스 pc_f1=0.735, mel_f1_lenient=0.643
+
+**핵심 발견 1 — BP flat bias 실증**:
+- BP onset+duration 유지, CREPE/pYIN/FCPE pitch로 교체하는 하이브리드 실험
+- CREPE는 octave 4(~59-69 MIDI)에서 감지, BP는 CQT shift 후 octave 5(~71-83 MIDI) → 옥타브 스냅 필수
+- `snap_to_bp_octave()`: CREPE pitch class를 BP 옥타브에 스냅 (±1 옥타브 후보 중 최근접 선택)
+- 4개 추정기 비교 결과:
+
+| 추정기 | 전략 | Δ notes | pc_f1 | Δ pc_f1 | 판정 |
+|---|---|---|---|---|---|
+| CREPE Q75 (±2) | 75th percentile | 7 | **0.743** | **+0.009** | ✅ **채택** |
+| FCPE Q75 (±2) | 75th percentile | 4 | 0.739 | +0.004 | ⚠️ CREPE보다 약간 열세 |
+| CREPE median (±2) | 50th percentile | 7 | 0.730 | -0.004 | ❌ 하락 |
+| pYIN Q75 (±2) | 75th percentile | 7 | 0.743 | +0.009 | ⚠️ CREPE와 동일 |
+
+- Q75(75th percentile)가 median보다 우수 → BP의 flat bias(-1/-2반음)를 상향 보정
+- FCPE(singing-specific)도 CREPE/pYIN과 98.4% 동일 피치 → 4개 추정기가 동일 결론
+
+**핵심 발견 2 — 피치 감지 천장 확정**:
+- 7개 모델(BP, CREPE, pYIN, FCPE, pesto, ROSVOT, SOME) 중 BP가 최고
+- 4개 F0 추정기(BP, CREPE, pYIN, FCPE)가 98%+ 동일 피치 → **음원의 실제 F0가 참조와 다름**
+- 꿈의 버스 피치 천장: pc_f1=**0.743** (CREPE Q75), oracle ceiling ~0.78
+- 나머지 ~25% 오류는 음원(보컬)과 참조(피아노 편곡) 간 본질적 피치 차이
+
+**핵심 발견 3 — MusicXML 평가 아티팩트 발견**:
+- MusicXML 처리 후 pc_f1이 0.735→0.193 폭락하는 현상 조사
+- 단계별 분리 결과: **Step 1 리딩 사일런스 제거(-5.9s)에서 전체 폭락 발생**
+- 원인: `apply_sectional_time_offset(range_sec=3.0)`이 5.9s 오프셋을 탐색 범위 밖으로 판단
+- 피치 보존율 100% (music21 roundtrip 확인) → **MusicXML writer는 정상, 평가 방법의 문제**
+- BPM도 정확 (감지 178.2 vs 참조 180.0, 1% 차이)
+
+**변경사항**:
+1. `core/vocal_melody_extractor.py` — `_crepe_q75_pitch_refinement()` 함수 추가
+   - CREPE Viterbi F0 → harmonic-enhanced vocals에서 프레임별 F0 추출
+   - 노트별 Q75 percentile 계산, BP 옥타브에 스냅
+   - ±2 반음 이내만 보정 (`_CREPE_Q75_MAX_DELTA = 2`)
+   - `_CREPE_CONF_THRESH` 0.5→0.4 (Q75 보정용 하향)
+2. `extract_melody()` + `extract_melody_with_bpm()` 양쪽에 Step 6으로 통합
+   - 파이프라인: Demucs → BP(raw∩harmonic) → CQT shift → per-note octave → **CREPE Q75** → gap fill
+
+**결과** (꿈의 버스, 실측):
+- pc_f1: 0.735 → **0.741** (+0.006), precision: 0.770→0.777, recall: 0.702→0.709
+- mel_f1_lenient: 0.643 → **0.649** (+0.006)
+- mel_f1_strict: 0.279 → 0.289, contour: 0.807→0.805
+- gen=435 (gap-fill 포함), 독립 테스트 0.743보다 약간 낮음 (gap-fill 노트와 상호작용)
+
+**다음 방향**: 전곡 평가로 CREPE Q75의 다른 곡 효과 확인, 또는 사용자 청취 피드백
+- 이유: 단일곡 +0.009 확인됨, 다른 곡에서도 flat bias 보정 효과 기대
 
 ---
 

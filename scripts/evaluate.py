@@ -43,6 +43,7 @@ def evaluate_all_songs(input_dir: Path, output_path: Path, ref_dir: Path = None)
             "avg_pitch_class_f1": 0.0,
             "avg_chroma_similarity": 0.0,
             "avg_contour_similarity": 0.0,
+            "avg_pitch_class_match_rate": 0.0,
             "avg_interval_similarity": 0.0,
         },
         "songs": {},
@@ -82,10 +83,10 @@ def evaluate_all_songs(input_dir: Path, output_path: Path, ref_dir: Path = None)
                     offset = find_optimal_time_offset(gen_notes, ref_notes)
                     gen_notes = apply_time_offset(gen_notes, offset)
             else:
-                # Original pipeline with postprocessing (offset only)
+                # Original pipeline — no reference-based octave correction
+                # Octave correction is now done inside extract_melody() via per-note CQT
                 gen_notes = extract_melody(mp3_path, cache_dir=cache_dir)
                 gen_notes = [n for n in gen_notes if n.duration > 0]
-                gen_notes = apply_octave_correction(gen_notes, ref_notes)
                 gen_notes = apply_sectional_time_offset(gen_notes, ref_notes)
 
             # Compare
@@ -100,8 +101,10 @@ def evaluate_all_songs(input_dir: Path, output_path: Path, ref_dir: Path = None)
             }
 
             print(
-                f"  [OK] pc_f1: {metrics['pitch_class_f1']:.3f}, "
+                f"  [OK] pc_f1: {metrics['pitch_class_f1']:.3f} "
+                f"(prec: {metrics['pitch_class_precision']:.3f}, rec: {metrics['pitch_class_recall']:.3f}), "
                 f"contour: {metrics['contour_similarity']:.3f}, "
+                f"pc_match: {metrics['pitch_class_match_rate']:.3f}, "
                 f"interval: {metrics['interval_similarity']:.3f}, "
                 f"chroma: {metrics['chroma_similarity']:.3f}, "
                 f"time: {processing_time:.1f}s\n"
@@ -127,6 +130,9 @@ def evaluate_all_songs(input_dir: Path, output_path: Path, ref_dir: Path = None)
         results["summary"]["avg_contour_similarity"] = sum(
             s["contour_similarity"] for s in results["songs"].values()
         ) / n
+        results["summary"]["avg_pitch_class_match_rate"] = sum(
+            s["pitch_class_match_rate"] for s in results["songs"].values()
+        ) / n
         results["summary"]["avg_interval_similarity"] = sum(
             s["interval_similarity"] for s in results["songs"].values()
         ) / n
@@ -142,23 +148,28 @@ def evaluate_all_songs(input_dir: Path, output_path: Path, ref_dir: Path = None)
 
     # Print table
     print(
-        f"{'Song':<30} | {'pc_f1':<6} | {'contour':<7} | {'interval':<8} | {'chroma':<6} | {'time':<6}"
+        f"{'Song':<30} | {'pc_f1':<6} | {'prec':<6} | {'rec':<6} | {'contour':<7} | {'pc_match':<8} | {'interval':<8} | {'chroma':<6} | {'time':<6}"
     )
-    print(f"{'-' * 85}")
+    print(f"{'-' * 110}")
 
     for stem, metrics in results["songs"].items():
         print(
             f"{stem:<30} | {metrics['pitch_class_f1']:<6.3f} | "
+            f"{metrics.get('pitch_class_precision', 0.0):<6.3f} | "
+            f"{metrics.get('pitch_class_recall', 0.0):<6.3f} | "
             f"{metrics['contour_similarity']:<7.3f} | "
+            f"{metrics.get('pitch_class_match_rate', 0.0):<8.3f} | "
             f"{metrics['interval_similarity']:<8.3f} | "
             f"{metrics['chroma_similarity']:<6.3f} | "
             f"{metrics['processing_time']:<6.1f}s"
         )
 
-    print(f"{'-' * 85}")
+    print(f"{'-' * 110}")
     print(
         f"{'AVERAGE':<30} | {results['summary']['avg_pitch_class_f1']:<6.3f} | "
+        f"{'':6} | {'':6} | "
         f"{results['summary']['avg_contour_similarity']:<7.3f} | "
+        f"{results['summary']['avg_pitch_class_match_rate']:<8.3f} | "
         f"{results['summary']['avg_interval_similarity']:<8.3f} | "
         f"{results['summary']['avg_chroma_similarity']:<6.3f} |"
     )
