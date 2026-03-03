@@ -552,6 +552,53 @@ python scripts/evaluate.py --input-dir /tmp/piano-test --output /tmp/piano-test/
 
 ---
 
+### v21 (2026-03-03) — 평가기준 재검토 + CREPE+Q75 파이프라인 발견
+
+**베이스라인**: v20 꿈의 버스 pc_f1=0.741, mel_f1_strict=0.291, mel_f1_lenient=0.655
+
+**평가 방법론 문제 발견**:
+1. `evaluate.py`가 `mel_f1_strict/lenient`를 계산하지만 출력하지 않았음 → 수정 완료
+2. v11~v16의 모든 모델 비교가 pc_f1(옥타브 무관, 200ms 허용)만 사용 → mel_f1_strict로 재검토 필요
+3. `_per_note_octave_correction()`이 BP에는 유용하지만 CREPE에는 역효과
+
+**공정한 파이프라인 비교 실험** (꿈의 버스, 동일 Demucs):
+
+| 파이프라인 | gen | pc_f1 | mel_strict | mel_lenient | onset_f1 |
+|---|---|---|---|---|---|
+| BP + CREPE Q75 (v20) | 436 | 0.747 | 0.291 | 0.655 | 0.642 |
+| CREPE only | 414 | 0.646 | 0.240 | 0.642 | 0.581 |
+| CREPE + per-note oct | 414 | 0.644 | 0.216 | 0.557 | 0.581 |
+| CREPE + per-note + Q75 | 414 | 0.679 | 0.307 | 0.590 | 0.668 |
+| **CREPE + Q75 (per-note 없이)** | **417** | **0.676** | **0.347** | **0.669** | **0.668** |
+| CREPE + Q75 + gap fill | 418 | 0.677 | 0.346 | 0.670 | - |
+| pYIN + Q75 | 279 | 0.614 | 0.188 | 0.532 | 0.444 |
+
+**핵심 발견**:
+- **mel_strict 기준 CREPE+Q75(per-note 없이)가 최선: 0.347 (+0.057 over BP v20)**
+- `_per_note_octave_correction`은 CREPE에 역효과: mel_lenient 0.669 → 0.590 (-0.079)
+  - CREPE는 windowed CQT로 옥타브 이미 보정됨 → 추가 per-note 보정 불필요
+- gap fill은 CREPE에 무의미 (+1 노트): CREPE F0 연속 추적으로 gap 없음
+- v11~v16 "CREPE < BP" 판정이 **잘못된 평가기준(pc_f1)** 때문이었음 확인
+  - pc_f1로는 BP 우세이나, 실제 청취품질 지표(mel_strict)로는 CREPE+Q75가 명확히 우위
+
+**평가 기준 비교**:
+- pc_f1: 옥타브 무관 + 200ms 허용 → CREPE 불리 (노트 수 차이에 민감)
+- mel_strict: 정확한 옥타브 + 50ms 허용 → CREPE 유리 (onset 정밀도 우수)
+- mel_lenient: 정확한 옥타브 + 200ms 허용 → CREPE 소폭 우위 (0.669 vs 0.661)
+
+**수정 사항**:
+- `scripts/evaluate.py`: mel_f1_strict/lenient 출력 추가
+- `scripts/compare_pipelines.py`: 신규 파이프라인 비교 스크립트
+- alignment 실험: 8/16구간 × pc_f1/onset_f1 목표 → mel_strict 개선 불가 확인
+  - 타이밍 median 54ms가 BP onset 감지 한계(정렬 방법과 무관)
+
+**다음 방향**: CREPE+Q75 파이프라인으로 교체 후 꿈의 버스 최종 확인, 이후 전곡 평가
+- 신규 파이프라인: Demucs → CREPE F0 → note segmentation → windowed CQT octave → Q75 pitch refinement
+- per-note octave correction 제거 (CREPE에 역효과 확인)
+- gap fill 제거 (CREPE에 효과 없음)
+
+---
+
 ### v20 (2026-02-28) — CREPE Q75 피치 보정 + 4-estimator 실증 + MusicXML 평가 아티팩트 발견
 
 **베이스라인**: v19 꿈의 버스 pc_f1=0.735, mel_f1_lenient=0.643
