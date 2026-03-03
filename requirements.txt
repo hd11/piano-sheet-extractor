@@ -1,6 +1,10 @@
-audio-separator[cpu]
-librosa>=0.10.0
-pretty-midi>=0.2.10
-music21>=9.1
-mir-eval>=0.7
-numpy>=1.24
+demucs
+torchcrepe
+librosa
+soundfile
+numpy
+scipy
+music21
+mir-eval
+torch
+torchaudio

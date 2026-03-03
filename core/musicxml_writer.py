@@ -1,5 +1,11 @@
-"""MusicXML writer for converting Note lists to sheet music."""
+"""MusicXML writer and reader for round-trip note identity.
 
+Key guarantee: save_musicxml() followed by load_musicxml_notes() must
+produce notes that faithfully represent the saved melody. The evaluation
+pipeline relies on this round-trip to ensure Output = Evaluation Identity.
+"""
+
+import logging
 from pathlib import Path
 from typing import List
 
@@ -7,219 +13,158 @@ import music21
 
 from .types import Note
 
-
-def _quantize_to_16th(quarter_length: float) -> float:
-    """Quantize a quarter-note duration to the nearest 16th note.
-
-    Args:
-        quarter_length: Duration in quarter notes.
-
-    Returns:
-        Quantized duration rounded to nearest 16th note (0.25 grid).
-        Minimum value is 0.25 (one 16th note).
-    """
-    quantized = round(quarter_length * 4) / 4
-    return max(quantized, 0.25)
-
-
-def notes_to_musicxml(
-    notes: List[Note],
-    title: str = "Melody",
-    bpm: float = 120.0,
-) -> str:
-    """Convert a list of Note objects to a MusicXML string.
-
-    Args:
-        notes: List of Note objects with pitch, onset, duration, velocity.
-        title: Title of the score.
-        bpm: Tempo in beats per minute.
-
-    Returns:
-        MusicXML string representation of the score.
-
-    Raises:
-        ValueError: If notes list is empty.
-    """
-    if not notes:
-        raise ValueError("Cannot create MusicXML from empty note list.")
-
-    score = _build_score(notes, title, bpm)
-
-    # Export to MusicXML string via GeneralObjectExporter
-    exporter = music21.musicxml.m21ToXml.GeneralObjectExporter(score)
-    xml_bytes = exporter.parse()
-    return xml_bytes.decode("utf-8")
+logger = logging.getLogger(__name__)
 
 
 def save_musicxml(
     notes: List[Note],
-    output_path: Path,
+    path: Path,
     title: str = "Melody",
     bpm: float = 120.0,
 ) -> Path:
-    """Convert a list of Note objects and save as a MusicXML file.
+    """Save a list of Note objects as a MusicXML file.
+
+    Processing steps:
+    1. Strip leading silence (shift so melody starts near beat 0)
+    2. Convert seconds to quarter-note positions using BPM
+    3. Quantize onsets and durations to 16th-note grid
+    4. Handle overlaps (monophonic constraint)
+    5. Write MusicXML via music21
 
     Args:
-        notes: List of Note objects with pitch, onset, duration, velocity.
-        output_path: Path where the MusicXML file will be saved.
-        title: Title of the score.
+        notes: List of Note objects.
+        path: Output file path.
+        title: Score title.
         bpm: Tempo in beats per minute.
 
     Returns:
         Path to the saved MusicXML file.
-
-    Raises:
-        ValueError: If notes list is empty.
     """
     if not notes:
-        raise ValueError("Cannot create MusicXML from empty note list.")
+        raise ValueError("Cannot save empty note list")
 
-    score = _build_score(notes, title, bpm)
-    output_path = Path(output_path)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Ensure parent directory exists
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    spq = 60.0 / bpm  # seconds per quarter note
 
-    # music21 write may append .musicxml extension; use fp to control
-    written = score.write("musicxml", fp=str(output_path))
-    return Path(written)
+    # Sort by onset
+    sorted_notes = sorted(notes, key=lambda n: n.onset)
 
+    # Strip leading silence
+    first_onset = sorted_notes[0].onset
 
-def _build_score(
-    notes: List[Note],
-    title: str,
-    bpm: float,
-) -> music21.stream.Score:
-    """Build a music21 Score from Note objects.
+    # Convert to quantized (onset_q, dur_q, pitch) tuples
+    quantized = []
+    for n in sorted_notes:
+        onset_q = (n.onset - first_onset) / spq
+        dur_q = n.duration / spq
 
-    Applies several post-processing steps to produce clean monophonic output:
-    1. Strip leading silence (shift all onsets so melody starts at beat 0)
-    2. Quantize onsets and durations to 16th-note grid
-    3. Deduplicate notes at same onset (keep highest pitch for melody)
-    4. Truncate overlapping durations (monophonic constraint)
-    5. Legato fill: extend notes to cover small gaps
+        # Quantize to 16th-note grid
+        onset_q = round(onset_q * 4) / 4
+        dur_q = max(0.25, round(dur_q * 4) / 4)
 
-    Args:
-        notes: List of Note objects.
-        title: Score title.
-        bpm: Tempo in BPM.
+        quantized.append([onset_q, dur_q, n.pitch, n.velocity])
 
-    Returns:
-        A music21 Score object with a single treble-clef Part.
-    """
-    seconds_per_quarter = 60.0 / bpm
+    # Deduplicate same-onset notes (keep highest pitch for melody)
+    quantized.sort(key=lambda x: (x[0], -x[2]))
+    deduped = []
+    for q in quantized:
+        if deduped and abs(q[0] - deduped[-1][0]) < 0.01:
+            continue
+        deduped.append(q)
 
-    # Create score and part
+    # Truncate overlapping durations (monophonic constraint)
+    for i in range(len(deduped) - 1):
+        gap = deduped[i + 1][0] - deduped[i][0]
+        if gap > 0 and deduped[i][1] > gap:
+            deduped[i][1] = gap
+
+    # Build music21 score
     score = music21.stream.Score()
     score.metadata = music21.metadata.Metadata()
     score.metadata.title = title
 
     part = music21.stream.Part()
     part.partName = "Melody"
-
-    # Add clef, tempo, and time signature
     part.append(music21.clef.TrebleClef())
     part.append(music21.tempo.MetronomeMark(number=bpm))
     part.append(music21.meter.TimeSignature("4/4"))
 
-    if not notes:
-        score.append(part)
-        return score
-
-    # --- Step 1: Strip leading silence ---
-    first_onset = min(n.onset for n in notes)
-    if first_onset > 0.1:  # more than 100ms of leading silence
-        notes = [
-            Note(pitch=n.pitch, onset=n.onset - first_onset,
-                 duration=n.duration, velocity=n.velocity)
-            for n in notes
-        ]
-
-    # --- Step 2: Remove isolated notes (large jump from both neighbors) ---
-    # Vocal melodies rarely have >7 semitone jumps; isolated jumps are errors
-    if len(notes) >= 3:
-        cleaned = [notes[0]]
-        for i in range(1, len(notes) - 1):
-            jump_before = abs(notes[i].pitch - notes[i - 1].pitch)
-            jump_after = abs(notes[i].pitch - notes[i + 1].pitch)
-            if jump_before > 7 and jump_after > 7:
-                continue  # skip isolated note
-            cleaned.append(notes[i])
-        cleaned.append(notes[-1])
-        notes = cleaned
-
-    # --- Step 3: Merge consecutive same-pitch notes (pre-quantization) ---
-    # BP often splits one sustained note into multiple short notes
-    merged_notes: List[Note] = [notes[0]]
-    for i in range(1, len(notes)):
-        prev = merged_notes[-1]
-        curr = notes[i]
-        gap = curr.onset - (prev.onset + prev.duration)
-        if curr.pitch == prev.pitch and gap < 0.15:  # same pitch, gap < 150ms
-            # Merge: extend previous note to cover current
-            new_dur = (curr.onset + curr.duration) - prev.onset
-            merged_notes[-1] = Note(
-                pitch=prev.pitch, onset=prev.onset,
-                duration=new_dur, velocity=prev.velocity,
-            )
-        else:
-            merged_notes.append(curr)
-    notes = merged_notes
-
-    # --- Step 4: Quantize to 16th-note grid ---
-    # Each entry: [onset_q, dur_q, pitch, velocity]
-    quantized = []
-    for n in notes:
-        onset_q = round(n.onset / seconds_per_quarter * 4) / 4
-        dur_q = _quantize_to_16th(n.duration / seconds_per_quarter)
-        quantized.append([onset_q, dur_q, n.pitch, n.velocity])
-
-    # --- Step 5: Sort by onset, then pitch descending (melody = top note) ---
-    quantized.sort(key=lambda x: (x[0], -x[2]))
-
-    # --- Step 6: Deduplicate same-onset notes (monophonic melody) ---
-    deduped = []
-    for q in quantized:
-        if deduped and abs(q[0] - deduped[-1][0]) < 0.01:
-            continue  # same onset position: keep earlier (higher pitch)
-        deduped.append(q)
-
-    # --- Step 7: Truncate overlapping durations ---
-    for i in range(len(deduped) - 1):
-        gap = deduped[i + 1][0] - deduped[i][0]
-        if gap > 0 and deduped[i][1] > gap:
-            deduped[i][1] = gap  # trim to not overlap next note
-
-    # --- Step 8: Legato fill — extend notes to cover small gaps ---
-    for i in range(len(deduped) - 1):
-        note_end = deduped[i][0] + deduped[i][1]
-        next_onset = deduped[i + 1][0]
-        gap = next_onset - note_end
-        if 0 < gap <= 0.5:  # gap ≤ half a beat: fill it
-            deduped[i][1] = next_onset - deduped[i][0]
-
-    # --- Step 9: Merge consecutive same-pitch notes (post-quantization) ---
-    # After legato fill, adjacent same-pitch notes should become one
-    final = [deduped[0]]
-    for i in range(1, len(deduped)):
-        prev = final[-1]
-        curr = deduped[i]
-        prev_end = prev[0] + prev[1]
-        if curr[2] == prev[2] and abs(prev_end - curr[0]) < 0.01:
-            # Same pitch and adjacent: merge
-            final[-1] = [prev[0], curr[0] + curr[1] - prev[0], prev[2], prev[3]]
-        else:
-            final.append(curr)
-    deduped = final
-
-    # --- Insert into part ---
     for onset_q, dur_q, pitch, vel in deduped:
         m21_note = music21.note.Note(pitch, quarterLength=dur_q)
         m21_note.volume.velocity = vel
         part.insert(onset_q, m21_note)
 
-    # Create measures with bar lines
     part.makeMeasures(inPlace=True)
-
     score.append(part)
-    return score
+
+    written = score.write("musicxml", fp=str(path))
+    logger.info(
+        "Saved MusicXML: %s (%d notes, bpm=%.0f)",
+        path.name,
+        len(deduped),
+        bpm,
+    )
+    return Path(written)
+
+
+def load_musicxml_notes(path: Path) -> List[Note]:
+    """Load notes from a MusicXML file for round-trip evaluation.
+
+    Parses the MusicXML file and reconstructs Note objects with timing
+    converted back to seconds using the score's tempo marking.
+
+    Args:
+        path: Path to MusicXML file.
+
+    Returns:
+        List of Note objects sorted by onset time.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"MusicXML file not found: {path}")
+
+    score = music21.converter.parse(str(path))
+    if not score.parts:
+        return []
+
+    part = score.parts[0]
+
+    # Find BPM from tempo mark
+    bpm = 120.0
+    for el in part.flatten():
+        if isinstance(el, music21.tempo.MetronomeMark):
+            bpm = el.number
+            break
+
+    spq = 60.0 / bpm
+
+    notes = []
+    for el in part.flatten().notesAndRests:
+        if isinstance(el, music21.note.Rest):
+            continue
+        if isinstance(el, music21.harmony.ChordSymbol):
+            continue
+
+        if isinstance(el, music21.note.Note):
+            onset = float(el.offset) * spq
+            duration = float(el.quarterLength) * spq
+            velocity = el.volume.velocity if el.volume and el.volume.velocity else 80
+            notes.append(
+                Note(
+                    pitch=el.pitch.midi,
+                    onset=round(onset, 4),
+                    duration=round(duration, 4),
+                    velocity=velocity,
+                )
+            )
+
+    notes.sort(key=lambda n: n.onset)
+    logger.info(
+        "Loaded MusicXML: %s (%d notes, bpm=%.0f)",
+        path.name,
+        len(notes),
+        bpm,
+    )
+    return notes
