@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 def segment_notes(
     contour: F0Contour,
-    min_note_duration: float = 0.08,
-    max_gap_frames: int = 3,
+    min_note_duration: float = 0.06,
+    max_gap_frames: int = 5,
 ) -> List[Note]:
     """Convert an F0 contour into a list of discrete Note objects.
 

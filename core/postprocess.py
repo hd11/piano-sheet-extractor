@@ -209,53 +209,99 @@ def _self_octave_correction(
 
 
 def _global_octave_adjust(notes: List[Note]) -> List[Note]:
-    """Shift all notes by whole octaves to match expected vocal range.
+    """Shift notes by whole octaves using sectional analysis.
 
     CREPE on separated vocals often detects pitch one octave too low
-    (subharmonic locking). This corrects by checking if the median pitch
-    falls below the typical vocal center and shifting up by 12 if so.
+    (subharmonic locking). Instead of a single global shift, this
+    analyzes notes in overlapping time windows and determines the
+    best octave shift per section to bring the median into the
+    expected vocal range.
 
-    Uses a vocal range prior (center C5=72, threshold 6 semitones):
-    - median < 66 (F#4): shift up +12 (likely subharmonic)
-    - median > 78 (F#5): shift down -12 (unlikely but handled)
-    - 66 <= median <= 78: no shift (normal vocal range)
+    Strategy:
+    1. First pass: determine dominant octave shift from overall median
+    2. Second pass: for each section (~30 notes), verify the shift and
+       apply per-section correction if needed
 
     This is entirely self-contained — NO reference data used.
     """
     if len(notes) < 5:
         return notes
 
-    vocal_center = 72  # C5 — typical K-pop vocal center
-    threshold = 6      # semitones from center to trigger shift
+    # Target vocal range: most vocals sit in MIDI 60-84 (C4-C6)
+    # Center biased to 75 (Eb5) because CREPE consistently locks on
+    # subharmonics — we want to favor shifting UP over not shifting.
+    vocal_target_low = 60
+    vocal_target_high = 84
+    vocal_center = 75  # Eb5 — bias toward octave-up correction
 
-    median_pitch = float(np.median([n.pitch for n in notes]))
+    pitches = np.array([n.pitch for n in notes])
+    global_median = float(np.median(pitches))
 
-    if median_pitch < vocal_center - threshold:
-        shift = 12
-    elif median_pitch > vocal_center + threshold:
-        shift = -12
-    else:
-        return notes
+    # Determine best global shift to bring median closest to vocal center
+    best_shift = 0
+    best_dist = abs(global_median - vocal_center)
+    for shift in [-24, -12, 12, 24]:
+        candidate = global_median + shift
+        dist = abs(candidate - vocal_center)
+        if dist < best_dist and vocal_target_low <= candidate <= vocal_target_high:
+            best_dist = dist
+            best_shift = shift
 
-    shifted = [
-        Note(
-            pitch=n.pitch + shift,
-            onset=n.onset,
-            duration=n.duration,
-            velocity=n.velocity,
+    # Apply sectional octave correction
+    section_size = 30  # notes per section
+    result = list(notes)
+
+    if best_shift != 0:
+        # Apply global shift first
+        result = [
+            Note(pitch=n.pitch + best_shift, onset=n.onset,
+                 duration=n.duration, velocity=n.velocity)
+            for n in result
+        ]
+        new_median = float(np.median([n.pitch for n in result]))
+        logger.info(
+            "Global octave adjust: shift=%+d (median %d -> %d)",
+            best_shift, int(global_median), int(new_median),
         )
-        for n in notes
-    ]
+    else:
+        # Even if global shift is 0, check sections for local anomalies
+        # Some sections may be an octave off while global median is fine
+        section_shifts = 0
+        for start in range(0, len(result), section_size // 2):
+            end = min(start + section_size, len(result))
+            if end - start < 5:
+                continue
+            section_pitches = np.array([result[i].pitch for i in range(start, end)])
+            section_median = float(np.median(section_pitches))
 
-    new_median = float(np.median([n.pitch for n in shifted]))
-    logger.info(
-        "Global octave adjust: shift=%+d (median %d -> %d)",
-        shift,
-        int(median_pitch),
-        int(new_median),
-    )
+            sec_best_shift = 0
+            sec_best_dist = abs(section_median - vocal_center)
+            for shift in [-12, 12]:
+                candidate = section_median + shift
+                dist = abs(candidate - vocal_center)
+                if dist < sec_best_dist and vocal_target_low <= candidate <= vocal_target_high:
+                    sec_best_dist = dist
+                    sec_best_shift = shift
 
-    return shifted
+            if sec_best_shift != 0:
+                for i in range(start, end):
+                    old_pitch = result[i].pitch
+                    new_pitch = old_pitch + sec_best_shift
+                    if vocal_target_low <= new_pitch <= vocal_target_high:
+                        result[i] = Note(
+                            pitch=new_pitch, onset=result[i].onset,
+                            duration=result[i].duration, velocity=result[i].velocity,
+                        )
+                        section_shifts += 1
+
+        if section_shifts > 0:
+            new_median = float(np.median([n.pitch for n in result]))
+            logger.info(
+                "Sectional octave adjust: %d notes shifted (median %d -> %d)",
+                section_shifts, int(global_median), int(new_median),
+            )
+
+    return result
 
 
 def _clip_vocal_range(notes: List[Note]) -> List[Note]:
@@ -277,12 +323,12 @@ def _snap_to_beats(
     notes: List[Note],
     audio: np.ndarray,
     sr: int,
-    subdivisions: int = 4,
+    subdivisions: int = 2,
 ) -> List[Note]:
     """Snap note onsets to nearest beat subdivision.
 
     Uses librosa beat tracking to build a beat grid, then subdivides
-    each beat interval (e.g. subdivisions=4 for 16th notes).
+    each beat interval (e.g. subdivisions=2 for 8th notes).
     Each note onset is moved to the nearest grid point within a
     maximum snap distance (half a subdivision).
 

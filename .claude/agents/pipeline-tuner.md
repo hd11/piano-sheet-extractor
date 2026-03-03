@@ -107,7 +107,7 @@ Key parameters that affect results:
 
 # Persistent Agent Memory
 
-You have a persistent Persistent Agent Memory directory at `/Users/lee/projects/piano-sheet-extractor/.claude/agent-memory/pipeline-tuner/`. Its contents persist across conversations.
+You have a persistent Agent Memory directory (scoped to this project via `memory: project`). Its contents persist across conversations.
 
 As you work, consult your memory files to build on previous experience.
 

@@ -49,30 +49,30 @@ def extract_melody(
 
     logger.info("=== Pipeline start: %s ===", mp3_path.name)
 
-    # Step 0: Estimate BPM early (used by postprocess and musicxml_writer)
-    bpm = _estimate_bpm(mp3_path)
-
     # Step 1: Vocal separation
     logger.info("Step 1: Vocal separation (Demucs)")
     vocals, sr = separate_vocals(mp3_path, cache_dir)
 
-    # Step 2: Pitch extraction (CREPE)
-    logger.info("Step 2: Pitch extraction (CREPE)")
+    # Step 2: Estimate BPM from vocals (more accurate than full mix)
+    vocals_22k = librosa.resample(vocals, orig_sr=sr, target_sr=22050)
+    bpm = _estimate_bpm_from_audio(vocals_22k, 22050)
+
+    # Step 3: Pitch extraction (CREPE)
+    logger.info("Step 3: Pitch extraction (CREPE)")
     contour = extract_f0(vocals, sr)
 
-    # Step 3: Note segmentation
-    logger.info("Step 3: Note segmentation")
+    # Step 4: Note segmentation
+    logger.info("Step 4: Note segmentation")
     notes = segment_notes(contour)
 
-    # Step 4: Postprocessing (self-contained, no reference)
-    # Pass original MP3 audio for beat-aligned onset snapping
-    logger.info("Step 4: Postprocessing")
-    mp3_audio, mp3_sr = librosa.load(str(mp3_path), sr=22050)
-    notes = postprocess_notes(notes, audio=mp3_audio, sr=mp3_sr)
+    # Step 5: Postprocessing (self-contained, no reference)
+    # Pass vocals for beat-aligned onset snapping (more accurate than full mix)
+    logger.info("Step 5: Postprocessing")
+    notes = postprocess_notes(notes, audio=vocals_22k, sr=22050)
 
     logger.info("Pipeline complete: %d notes extracted", len(notes))
 
-    # Step 5: Save MusicXML if output path given
+    # Step 6: Save MusicXML if output path given
     if output_path is not None and notes:
         title = mp3_path.stem
         save_musicxml(notes, output_path, title=title, bpm=bpm)
@@ -81,16 +81,23 @@ def extract_melody(
     return notes
 
 
-def _estimate_bpm(mp3_path: Path) -> float:
-    """Estimate tempo from audio using librosa beat tracker.
+def _estimate_bpm_from_audio(y: np.ndarray, sr: int) -> float:
+    """Estimate tempo from audio array using librosa beat tracker.
 
     Includes tempo octave disambiguation: if librosa returns a tempo
     below 100 BPM, checks whether double tempo has comparable beat
     strength via onset autocorrelation. This corrects the common
     half-tempo detection issue in fast songs.
+
+    Args:
+        y: Audio array (mono, typically vocals at 22050 Hz).
+        sr: Sample rate.
     """
     try:
-        y, sr = librosa.load(str(mp3_path), sr=22050, duration=60)
+        # Use first 60 seconds
+        max_samples = sr * 60
+        if len(y) > max_samples:
+            y = y[:max_samples]
         tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
         bpm = float(np.atleast_1d(tempo)[0])
         logger.info("Raw librosa BPM: %.1f", bpm)

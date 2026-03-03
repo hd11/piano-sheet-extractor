@@ -69,8 +69,8 @@ def extract_f0(
         confidence_threshold,
     )
 
-    # Median filter for pitch smoothing (50ms window at 10ms step)
-    pitch = median_filter(pitch, size=5)
+    # Light median filter for residual pitch jitter (30ms window)
+    pitch = median_filter(pitch, size=3)
 
     # Zero out low-confidence frames
     pitch[periodicity < confidence_threshold] = 0.0

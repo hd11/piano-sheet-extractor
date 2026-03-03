@@ -119,4 +119,128 @@
 - 참조 불침투: postprocess/pipeline 모두 ref 파라미터 0건 PASS
 - 꿈의 버스 전체 평가: 미완 (CREPE CPU ~25분 소요)
 
+### v3 Analysis (2026-03-03) — v2 baseline 8곡 평가 완료 + 분석
+
+**데이터**: results/v2_baseline.json (8곡 full round-trip 평가)
+
+**주요 발견**:
+1. **Chroma vs Melody 메트릭 역전**
+   - chroma_similarity=0.972 (매우 높음) but melody_f1_strict=0.040 (극히 낮음)
+   - 해석: 음정 contour는 정확하나 pitch register와 onset timing이 모두 문제
+
+2. **너에게100퍼센트 mel_strict=0.000 (유일)**
+   - ref pitch range: 72-87 (좁은 범위, 높은 음역)
+   - pc_f1=0.187 (평균과 유사)
+   - chroma=0.992 (높음)
+   - 원인: CREPE의 subharmonic lock이 높은 음역대에서 심함 (global +12 보정 불충분)
+   - 또는 높은 음역대 onset snap이 과도함 (beat grid snapping이 음정까지 왜곡)
+
+3. **MusicXML 라운드트립 노트 수 증가**
+   - Golden: 368 저장 → (load 시 몇 개?)
+   - IRIS OUT: 311 저장 → (load 시 몇 개?)
+   - 꿈의 버스: 457 저장 (ref 477과 유사)
+   - 패턴: 많은 곡에서 음역대별 note_count_ratio < 1 → 음지가 손실됨
+   - 의심: musicxml_writer.py의 note 병합/타이 로직이 save 시점에 작동, load 시 분할
+
+4. **Onset_f1 평균 0.417**
+   - 반대의 연호 평가로 보면: ~42% 정도만 정확한 타이밍
+   - beat snap이 onset을 "정확히" 만들지는 못함 (아마도 off-beat phrase, dotted rhythm 문제)
+
+5. **곡별 성능 편차**
+   - 좋음: IRIS OUT (mel_strict=0.122), 여름이었다 (mel_strict=0.060)
+   - 나쁨: Golden (mel_strict=0.013), 너에게100퍼센트 (mel_strict=0.000)
+   - 상관관계: BPM/stepwise%/음역대와의 직접 상관 약함 → 다른 요소 (harmony complexity, vocal articulation 등)
+
+**3개 에이전트 분석 종합 — 핵심 병목 3가지**:
+
+1. **BPM 추정 오류** (음악-이론, DSP 에이전트 지적)
+   - 현재: 풀믹스 기반 librosa.tempo() → 하프 템포 감지 (예: 180→89)
+   - 원인: percussion/bass가 주파수 대역을 지배, BPM 감지 이중화
+   - 해결책: 보컬 기반 beat_track() 사용 (v21에서 이미 검증됨)
+
+2. **CREPE 서브하모닉 + global +12 고정 보정** (DSP, 음악-이론 지적)
+   - 현재: CREPE median 58-71 MIDI → global +12 → 70-83 MIDI (모든 곡 동일)
+   - 문제: 곡별 음역대 편차 미대응. 너에게100퍼센트(ref 72-87)에서 mel_strict=0.000
+   - 원인: 높은 음역대에서 subharmonic lock 심함, +12 보정이 과도할 수 있음
+   - 해결책: 구간별 적응형 옥타브 보정 또는 CREPE confidence threshold 하향 (0.5→0.35)
+
+3. **MusicXML 라운드트립 노트 손실** (DSP, 메트릭 에이전트 지적)
+   - 현재: musicxml_writer.py에서 makeMeasures() 사용 + 16분음표 고정 양자화
+   - 문제: save 시 노트 병합/타이 처리 → load 시 파괴 또는 이중화 (Golden 368→?, IRIS OUT 311→?)
+   - 원인: music21 makeMeasures()가 aggressive note consolidation 수행
+   - 해결책: v21의 musicxml_writer_v2.py 방식 (명시적 measure 구성, makeMeasures 제거)
+
+**다음 방향 (우선순위 순)**:
+1. [LOW effort] BPM 추정을 보컬 기반으로 변경 + beat snap에 vocals 신호 전달
+2. [LOW effort] CREPE confidence 0.5→0.35, min_note_duration 0.08→0.05 (false positive 제거)
+3. [MED effort] 적응형 구간별 옥타브 보정 (pitch histogram 기반)
+4. [MED effort] MusicXML writer v2 방식 교체 (makeMeasures 제거, 명시적 measure)
+5. [LOW effort] Viterbi 후 median filter 제거 (이중 스무딩 방지)
+
+**근거**:
+- v2 파이프라인은 chroma(0.972), contour(0.767)에서는 우수
+- 그러나 mel_strict(0.040) 극히 낮음 → onset/pitch register 문제 복합
+- 위 3가지 병목 해결 시 mel_strict 0.040→0.150+ 예상 (chroma 높으므로)
+
+### v3 Implementation (2026-03-03) — 5단계 파이프라인 개선
+
+**목표**: v2 baseline mel_strict 0.040 → 0.15+ (v3 Analysis에서 식별된 3대 병목 해결)
+
+**Step #1: BPM 보컬 기반 변경**
+- `core/pipeline.py`: BPM 추정을 풀믹스→보컬로 이동 (Step 1 보컬분리 이후)
+- `_estimate_bpm(mp3_path)` → `_estimate_bpm_from_audio(vocals_22k, 22050)`
+- postprocess beat snap도 보컬 오디오 전달: `postprocess_notes(notes, audio=vocals_22k, sr=22050)`
+
+**Step #2: CREPE 파라미터 튜닝**
+- `core/pitch_extractor.py`: median filter size 5→3 (Viterbi와 이중 스무딩 완화)
+- `core/note_segmenter.py`: min_note_duration 0.08→0.06 (60ms), max_gap_frames 3→5 (50ms 브리징)
+- confidence_threshold: 0.3, 0.4 시도 → 과도한 노트 생성으로 폐기, 0.5 유지
+- median filter 완전 제거 시도 → 일부 곡 하락으로 size=3으로 절충
+
+**Step #3: 적응형 구간별 옥타브 보정**
+- `core/postprocess.py`: `_global_octave_adjust()` 재작성
+- vocal_center 72→75 (Eb5, CREPE 서브하모닉 상향 편향)
+- 글로벌 최적 시프트 [-24,-12,+12,+24] 탐색 후 적용
+- 글로벌 시프트=0일 때 구간별(30노트) 보정 폴백
+- 효과: 너에게100퍼센트 mel_strict 0.000→0.091
+
+**Step #4: MusicXML writer 개선**
+- `core/musicxml_writer.py`: 전면 재작성
+- `makeMeasures(inPlace=True)` 제거 → 명시적 `Measure` 객체 생성
+- 양자화 그리드: 16분음표(0.25)→8분음표(0.5)
+- 마디 경계 노트 분할 + tie(start/continue/stop) 명시 처리
+- `load_musicxml_notes()`: 타이드 노트 병합으로 라운드트립 일관성 보장
+- 라운드트립 검증: save 5노트 → load 5노트 일치 확인
+- 효과: IRIS OUT 0.085→0.181, 달리 0.039→0.158 대폭 개선
+
+**Step #5: beat snap 그리드 통일**
+- `core/postprocess.py`: `_snap_to_beats()` subdivisions 4(16분음표)→2(8분음표)
+- MusicXML 8분음표 그리드와 일관성 확보
+
+**결과 (v3 step4 기준, 8곡 평균)**:
+
+| 지표 | v2 baseline | v3 step4 | 변화 |
+|------|-------------|----------|------|
+| mel_strict | 0.040 | **0.066** | +65% |
+| mel_lenient | 0.106 | **0.173** | +63% |
+| pc_f1 | 0.149 | **0.189** | +27% |
+| onset_f1 | 0.417 | **0.481** | +15% |
+| contour | 0.767 | **0.786** | +2% |
+| chroma | 0.972 | **0.969** | -0.3% |
+
+**곡별 주요 변화**:
+- IRIS OUT: mel_strict 0.122→0.181 (+48%)
+- 달리 표현할 수 없어요: mel_strict 0.020→0.158 (+690%)
+- 너에게100퍼센트: mel_strict 0.000→0.039 (개선, step3b에서 0.091이었으나 8분음표 그리드로 소폭 하락)
+
+**폐기한 시도**:
+- CREPE confidence 0.3: 노트 과잉 생성 (달리 668→990노트), mel_strict 하락
+- CREPE confidence 0.4: IRIS OUT mel_strict 0.122→0.048 하락
+- median filter 완전 제거: 일부 곡 피치 안정성 저하
+
+**다음 방향**:
+- 전곡 최종 평가 (step5 포함) 실행 필요
+- 8분음표 그리드가 일부 빠른 곡에서 과도할 수 있음 → 적응형 그리드 검토
+- 여전히 mel_strict 0.066으로 목표(0.15) 미달 → pitch register 정확도 추가 개선 필요
+
 (이전 v9~v21 이력은 git history 참조)
