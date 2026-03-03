@@ -1360,10 +1360,7 @@ def extract_melody(
         List of Note objects representing the extracted melody.
         Returns empty list if no voiced frames are detected.
     """
-    if USE_VOCAL_MODEL:
-        logger.info("extract_melody: starting pesto+CQT pipeline for %s", mp3_path)
-    else:
-        logger.info("extract_melody: starting BP+CQT pipeline for %s", mp3_path)
+    logger.info("extract_melody: starting CREPE+Q75 pipeline for %s", mp3_path)
 
     # Step 1: Separate vocals from the MP3
     vocals, sr = separate_vocals(mp3_path, cache_dir)
@@ -1374,46 +1371,17 @@ def extract_melody(
 
     vocals_f32 = vocals.astype(np.float32)
 
-    if USE_VOCAL_MODEL:
-        # Step 2 (pesto): pesto F0 -> note segmentation -> windowed CQT octave correction
-        notes = _vocmodel_pipeline(vocals_f32, sr)
-        logger.info("extract_melody: pesto pipeline complete, %d notes", len(notes))
-        return notes
+    # Step 2: CREPE F0 -> note segmentation -> windowed CQT octave correction
+    notes = _crepe_pipeline(vocals_f32, sr)
 
-    # Step 2 (BP): Run BP on raw + harmonic vocals, intersect
-    bp_notes = _run_bp_pipeline(vocals_f32, sr)
-
-    if not bp_notes:
-        logger.warning("extract_melody: no BP notes extracted")
+    if not notes:
+        logger.warning("extract_melody: no notes from CREPE pipeline")
         return []
 
-    # Step 3: CQT salience for octave determination
-    sal_w, midi_bins, times_cqt = _compute_cqt_salience(vocals_f32, sr)
-
-    # Step 4: Determine and apply octave shift
-    shift = _determine_octave_shift(bp_notes, sal_w, midi_bins, times_cqt)
-
-    notes = [
-        Note(
-            pitch=n.pitch + shift,
-            onset=n.onset,
-            duration=n.duration,
-            velocity=n.velocity,
-        )
-        for n in bp_notes
-        if _VOCAL_MIDI_LOW - 3 <= n.pitch + shift <= _VOCAL_MIDI_HIGH + 5
-    ]
-
-    # Step 5: Per-note octave correction using CQT
-    notes = _per_note_octave_correction(notes, sal_w, midi_bins, times_cqt)
-
-    # Step 6: CREPE Q75 pitch refinement (fixes ~2% flat bias notes)
+    # Step 3: Q75 pitch refinement (further refines CREPE pitch within ±2 semitones)
     notes = _crepe_q75_pitch_refinement(notes, vocals_f32, sr)
 
-    logger.info(
-        "extract_melody: pipeline complete, %d notes (shift=%+d)",
-        len(notes), shift,
-    )
+    logger.info("extract_melody: pipeline complete, %d notes", len(notes))
     return notes
 
 
@@ -1452,35 +1420,18 @@ def extract_melody_with_bpm(
     # Step 2: Detect BPM from vocals
     bpm = detect_bpm(vocals_f32, sr)
 
-    # Step 3: BP on raw + harmonic vocals, intersect
-    bp_notes = _run_bp_pipeline(vocals_f32, sr)
+    # Step 3: CREPE F0 -> note segmentation -> windowed CQT octave correction
+    notes = _crepe_pipeline(vocals_f32, sr)
 
-    if not bp_notes:
-        logger.warning("extract_melody_with_bpm: no BP notes extracted")
+    if not notes:
+        logger.warning("extract_melody_with_bpm: no notes from CREPE pipeline")
         return [], bpm
 
-    # Step 4: CQT octave correction
-    sal_w, midi_bins, times_cqt = _compute_cqt_salience(vocals_f32, sr)
-    shift = _determine_octave_shift(bp_notes, sal_w, midi_bins, times_cqt)
-
-    notes = [
-        Note(
-            pitch=n.pitch + shift,
-            onset=n.onset,
-            duration=n.duration,
-        )
-        for n in bp_notes
-        if _VOCAL_MIDI_LOW - 3 <= n.pitch + shift <= _VOCAL_MIDI_HIGH + 5
-    ]
-
-    # Step 5: Per-note octave correction using CQT
-    notes = _per_note_octave_correction(notes, sal_w, midi_bins, times_cqt)
-
-    # Step 6: CREPE Q75 pitch refinement (fixes ~2% flat bias notes)
+    # Step 4: Q75 pitch refinement (further refines CREPE pitch within ±2 semitones)
     notes = _crepe_q75_pitch_refinement(notes, vocals_f32, sr)
 
     logger.info(
-        "extract_melody_with_bpm: pipeline complete, %d notes, %.1f BPM (shift=%+d)",
-        len(notes), bpm, shift,
+        "extract_melody_with_bpm: pipeline complete, %d notes, %.1f BPM",
+        len(notes), bpm,
     )
     return notes, bpm
