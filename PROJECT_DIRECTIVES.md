@@ -243,4 +243,44 @@
 - 8분음표 그리드가 일부 빠른 곡에서 과도할 수 있음 → 적응형 그리드 검토
 - 여전히 mel_strict 0.066으로 목표(0.15) 미달 → pitch register 정확도 추가 개선 필요
 
+### v4 Adaptive Grid (2026-03-04) — BPM 적응형 양자화 그리드
+
+**이유**: 꿈의 버스(BPM=180) 청음 시 v3보다 v2가 멜로디 구분이 더 잘 됨.
+music-melody-expert 에이전트 분석 결과, v3에서 8분음표 그리드(subdivisions=2, quantize=0.5)가
+BPM=180 곡의 리듬 해상도를 절반으로 낮춘 것이 원인.
+
+**근거**:
+- BPM=180에서 8분음표 = 0.169초 → 전체 duration의 61.2%가 동일 값으로 균일화
+- IOI(음표 간 시간)가 4종류로만 집중, 리듬 변화 소멸
+- 노트 수 22% 감소 (v2: 457 → v3: 356) — 동일 grid에 겹쳐 deduplicate
+- 82% stepwise 원곡에서 리듬 구분 소실 → "같은 음 나열"로 들림
+
+**변경 사항**:
+1. `core/postprocess.py` — `_snap_to_beats()`: BPM 적응형 subdivisions
+   - BPM >= 140: subdivisions=4 (16분음표)
+   - BPM < 140: subdivisions=2 (8분음표)
+   - BPM 파라미터 추가 (pipeline에서 전달)
+2. `core/musicxml_writer.py` — `save_musicxml()`: BPM 적응형 양자화
+   - BPM >= 140: 16분음표 그리드 (round * 4 / 4)
+   - BPM < 140: 8분음표 그리드 (round * 2 / 2)
+3. `core/pipeline.py` — BPM을 postprocess에 전달
+
+**꿈의 버스 단일곡 결과**:
+
+| 메트릭 | v2 | v3 | v4 |
+|--------|-----|-----|-----|
+| mel_strict | 0.058 | ~0.04 | 0.049 |
+| onset_f1 | 0.501 | ~0.42 | 0.488 |
+| chroma | 0.996 | ~0.97 | 0.993 |
+| notes | 457 | 356 | 429/477 |
+
+- 노트 수 v3(356) → v4(429) 회복 (+20%), grid points 1645개 (16분음표)
+- max_snap=44ms로 BPM=172 16분음표 해상도 유지
+- mel_strict v2(0.058)보다 소폭 하락 → BPM 보컬 기반(172 vs 178), 적응형 옥타브 보정(center=75) 영향
+- 청음 검증 필요: v2 대비 멜로디 구분 개선 여부 확인
+
+**남은 이슈**:
+- BPM 보컬 기반 172 vs 풀믹스 178: 어느 쪽이 나은지 A/B 비교 필요
+- mel_strict 0.049로 목표(0.15) 미달 → pitch register 정확도가 주요 병목
+
 (이전 v9~v21 이력은 git history 참조)

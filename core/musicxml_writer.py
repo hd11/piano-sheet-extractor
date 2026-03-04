@@ -59,15 +59,25 @@ def save_musicxml(
     # Strip leading silence
     first_onset = sorted_notes[0].onset
 
+    # Adaptive quantization grid based on BPM
+    # Fast songs (>=140 BPM): 16th-note grid for rhythmic detail
+    # Slow songs (<140 BPM): 8th-note grid to avoid fragmentation
+    if bpm >= 140:
+        grid_mult = 4  # 16th notes (0.25 quarter notes)
+        min_dur = 0.25
+    else:
+        grid_mult = 2  # 8th notes (0.5 quarter notes)
+        min_dur = 0.5
+
     # Convert to quantized (onset_q, dur_q, pitch, velocity) tuples
     quantized = []
     for n in sorted_notes:
         onset_q = (n.onset - first_onset) / spq
         dur_q = n.duration / spq
 
-        # Quantize to 8th-note grid (0.5 quarter notes)
-        onset_q = round(onset_q * 2) / 2
-        dur_q = max(0.5, round(dur_q * 2) / 2)
+        # Quantize to adaptive grid
+        onset_q = round(onset_q * grid_mult) / grid_mult
+        dur_q = max(min_dur, round(dur_q * grid_mult) / grid_mult)
 
         quantized.append([onset_q, dur_q, n.pitch, n.velocity])
 

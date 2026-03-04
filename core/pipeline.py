@@ -68,7 +68,7 @@ def extract_melody(
     # Step 5: Postprocessing (self-contained, no reference)
     # Pass vocals for beat-aligned onset snapping (more accurate than full mix)
     logger.info("Step 5: Postprocessing")
-    notes = postprocess_notes(notes, audio=vocals_22k, sr=22050)
+    notes = postprocess_notes(notes, audio=vocals_22k, sr=22050, bpm=bpm)
 
     logger.info("Pipeline complete: %d notes extracted", len(notes))
 

@@ -24,6 +24,7 @@ def postprocess_notes(
     notes: List[Note],
     audio: Optional[np.ndarray] = None,
     sr: Optional[int] = None,
+    bpm: Optional[float] = None,
 ) -> List[Note]:
     """Apply self-contained postprocessing to extracted notes.
 
@@ -38,6 +39,7 @@ def postprocess_notes(
         notes: Raw extracted Note list.
         audio: Source audio signal (for beat tracking). No reference data.
         sr: Sample rate of audio.
+        bpm: Estimated BPM (for adaptive grid resolution).
 
     Returns:
         Cleaned Note list.
@@ -54,8 +56,10 @@ def postprocess_notes(
     notes = _clip_vocal_range(notes)
 
     # Beat-aligned onset snapping (self-contained, uses audio only)
+    # Adaptive subdivisions: fast songs (>=140 BPM) use 16th notes, slow songs use 8th notes
     if audio is not None and sr is not None:
-        notes = _snap_to_beats(notes, audio, sr)
+        subdivisions = 4 if (bpm is not None and bpm >= 140) else 2
+        notes = _snap_to_beats(notes, audio, sr, subdivisions=subdivisions)
 
     logger.info(
         "Postprocessing: %d -> %d notes",
