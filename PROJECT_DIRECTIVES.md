@@ -464,11 +464,34 @@ music-melody-expert 분석 결과:
 - 파일: core/note_extractor_some.py (파이프라인에서 미사용, 참고용)
 
 **다음 방향 (우선순위순, 8곡 데이터 기반, 모두 범용/참조 미사용)**:
-1. **RMVPE F0 추출기** — subharmonic에 강한 별도 F0 모델 (가중치 다운로드 필요: github.com/yxlllc/RMVPE)
-2. [G] Same-pitch re-attack — amplitude envelope로 re-attack 감지 (8/8곡)
+1. **RMVPE F0 추출기** — subharmonic에 강한 별도 F0 모델 (pip 미지원, 설치 복잡)
+2. ~~[G] Same-pitch re-attack — amplitude envelope로 re-attack 감지 (8/8곡)~~ → v11에서 구현
 3. [P3+H] Grid 개선 — BPM-adaptive min_note_duration (4/8곡)
 4. [P1] BPM disambiguation — 다중 ratio 후보 검증 (2/8곡)
 5. [F] Boundary overflow — energy envelope 기반 곡 끝 감지 (1/8곡)
+
+### v11 Re-attack Detection (2026-03-05) — Same-pitch re-attack 감지
+
+**이유**: v6 심층 분석에서 Same-pitch Repetition Loss가 **8/8곡** 공통 문제로 식별 (~22pp 손실).
+`_merge_same_pitch()`이 gap < 0.15s인 연속 동일 피치 노트를 맹목적으로 병합, 가수의 re-attack(같은 음 반복) 리듬 정보 소실.
+
+**변경 사항**:
+1. `core/postprocess.py` — `_merge_same_pitch()` 개선
+   - 기존: gap < 0.15s이면 무조건 병합
+   - 변경: 보컬 amplitude envelope 분석으로 re-attack 감지
+   - gap >= 20ms일 때 gap 구간 RMS vs 전후 노트 RMS 비교
+   - dip_ratio < 0.4 (gap RMS가 주변의 40% 미만) → re-attack으로 판정, 병합 안 함
+   - gap < 20ms → CREPE 프레임 아티팩트, 기존대로 병합
+2. `_detect_reattack()` 함수 추가
+   - 30ms context window로 전후 노트 amplitude 측정
+   - self-contained: 보컬 오디오만 사용, 참조 데이터 미사용
+
+**검증**:
+- Unit test: 4가지 시나리오 PASS (no audio, no dip, dip, short gap)
+- 참조 불침투: audio만 사용, ref 파라미터 없음
+- 8곡 전체 평가: 실행 중 (results/v11_reattack.json)
+
+**8곡 전체 평가 결과**: (평가 완료 후 기록)
 
 **아키텍처 변경 필요성 확인 (v7~v10 6회 실패)**:
 - CREPE 파라미터 튜닝 한계 도달 (v6 mel_strict=0.067이 ceiling)

@@ -50,7 +50,7 @@ def postprocess_notes(
     original_count = len(notes)
 
     notes = _remove_outliers(notes)
-    notes = _merge_same_pitch(notes)
+    notes = _merge_same_pitch(notes, audio=audio, sr=sr)
     notes = _global_octave_adjust(notes)
     notes = _self_octave_correction(notes)
     notes = _clip_vocal_range(notes)
@@ -112,43 +112,116 @@ def _remove_outliers(
 def _merge_same_pitch(
     notes: List[Note],
     max_gap: float = 0.15,
+    audio: Optional[np.ndarray] = None,
+    sr: Optional[int] = None,
 ) -> List[Note]:
     """Merge consecutive notes with the same pitch and small gap.
+
+    If audio is provided, detects re-attacks using amplitude envelope
+    analysis. Re-attacked notes are NOT merged even if the gap is small.
 
     Args:
         notes: Input notes sorted by onset.
         max_gap: Maximum gap in seconds to merge across.
+        audio: Source audio for re-attack detection (self-contained).
+        sr: Sample rate of audio.
 
     Returns:
-        Notes with same-pitch consecutive notes merged.
+        Notes with same-pitch consecutive notes merged (except re-attacks).
     """
     if len(notes) < 2:
         return notes
 
     merged = [notes[0]]
+    reattacks = 0
     for i in range(1, len(notes)):
         prev = merged[-1]
         curr = notes[i]
         gap = curr.onset - (prev.onset + prev.duration)
         if curr.pitch == prev.pitch and gap < max_gap:
-            new_dur = (curr.onset + curr.duration) - prev.onset
-            merged[-1] = Note(
-                pitch=prev.pitch,
-                onset=prev.onset,
-                duration=new_dur,
-                velocity=prev.velocity,
-            )
+            # Check for re-attack using amplitude envelope
+            if (audio is not None and sr is not None
+                    and gap >= 0.02
+                    and _detect_reattack(prev, curr, audio, sr)):
+                merged.append(curr)
+                reattacks += 1
+            else:
+                new_dur = (curr.onset + curr.duration) - prev.onset
+                merged[-1] = Note(
+                    pitch=prev.pitch,
+                    onset=prev.onset,
+                    duration=new_dur,
+                    velocity=prev.velocity,
+                )
         else:
             merged.append(curr)
 
-    if len(merged) < len(notes):
+    merges = len(notes) - len(merged)
+    if merges > 0 or reattacks > 0:
         logger.info(
-            "Same-pitch merge: %d -> %d notes",
+            "Same-pitch merge: %d -> %d notes (%d merged, %d re-attacks kept)",
             len(notes),
             len(merged),
+            merges,
+            reattacks,
         )
 
     return merged
+
+
+def _detect_reattack(
+    prev: Note,
+    curr: Note,
+    audio: np.ndarray,
+    sr: int,
+    dip_threshold: float = 0.4,
+) -> bool:
+    """Detect if transition between two same-pitch notes is a re-attack.
+
+    Analyzes the amplitude envelope in the gap between notes.
+    A re-attack is indicated by a significant amplitude dip in the gap
+    compared to the surrounding note amplitudes.
+
+    Self-contained: uses only note timing and source audio.
+
+    Args:
+        prev: Previous note.
+        curr: Current note (same pitch as prev).
+        audio: Audio signal.
+        sr: Sample rate.
+        dip_threshold: If gap RMS / surrounding RMS < this, it's a re-attack.
+
+    Returns:
+        True if a re-attack is detected.
+    """
+    prev_end_sample = int((prev.onset + prev.duration) * sr)
+    curr_start_sample = int(curr.onset * sr)
+
+    if curr_start_sample <= prev_end_sample or curr_start_sample > len(audio):
+        return False
+
+    # Context windows: 30ms from end of prev note, 30ms from start of curr note
+    margin_samples = int(0.03 * sr)
+
+    prev_region_start = max(0, prev_end_sample - margin_samples)
+    prev_region = audio[prev_region_start:prev_end_sample]
+
+    gap_region = audio[prev_end_sample:min(curr_start_sample, len(audio))]
+
+    curr_region_end = min(curr_start_sample + margin_samples, len(audio))
+    curr_region = audio[curr_start_sample:curr_region_end]
+
+    if len(prev_region) < 2 or len(gap_region) < 2 or len(curr_region) < 2:
+        return False
+
+    prev_rms = np.sqrt(np.mean(prev_region ** 2)) + 1e-10
+    gap_rms = np.sqrt(np.mean(gap_region ** 2)) + 1e-10
+    curr_rms = np.sqrt(np.mean(curr_region ** 2)) + 1e-10
+
+    surrounding_rms = max(prev_rms, curr_rms)
+    dip_ratio = gap_rms / surrounding_rms
+
+    return dip_ratio < dip_threshold
 
 
 def _harmonic_correction(
