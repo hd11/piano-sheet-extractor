@@ -283,4 +283,40 @@ BPM=180 곡의 리듬 해상도를 절반으로 낮춘 것이 원인.
 - BPM 보컬 기반 172 vs 풀믹스 178: 어느 쪽이 나은지 A/B 비교 필요
 - mel_strict 0.049로 목표(0.15) 미달 → pitch register 정확도가 주요 병목
 
+### v5 Hole Fix (2026-03-04) — 구멍난 악보 해결
+
+**이유**: 청음 피드백 "멜로디가 중간중간 구멍난 악보 느낌". music-melody-expert 분석 결과
+161개 구멍(45.2초, 곡의 28%)이 프레이즈 내부에 존재. 출력 커버리지 67.3% vs 참조 92.0%.
+
+**근본 원인 3가지**:
+1. gap bridging이 same-pitch일 때만 동작 → 비브라토(72→0→73)에서 bridge 거부
+2. CREPE confidence 0.5가 너무 높아 브레시/비브라토 구간 삭제
+3. VOCAL_RANGE_HIGH=84가 참조 상한(MIDI 90)보다 낮아 고음 노트 차단
+
+**변경 사항**:
+1. `core/note_segmenter.py` — gap bridging pitch tolerance ±2 semitone, max_gap 5→10 frames
+2. `core/pitch_extractor.py` — confidence_threshold 0.5→0.35
+3. `core/postprocess.py` — VOCAL_RANGE_HIGH 84→96
+
+**꿈의 버스 결과**:
+
+| 메트릭 | v4 | v5 | 변화 |
+|--------|-----|-----|------|
+| mel_strict | 0.049 | 0.032 | -35% (strict 하락) |
+| mel_lenient | 0.137 | 0.265 | +93% (대폭 상승) |
+| pc_f1 | 0.141 | 0.267 | +89% (대폭 상승) |
+| onset_f1 | 0.488 | 0.474 | -3% |
+| notes | 429/477 | 473/477 | 구멍 해소 |
+
+**해석**:
+- 노트 수 473/477 → 구멍 거의 다 메워짐 (목표 달성)
+- mel_lenient +93% → 대략적 멜로디는 훨씬 개선 (청음 체감 개선 예상)
+- mel_strict -35% → confidence 0.35로 내린 노트의 피치 정확도가 낮아 exact match 하락
+- 트레이드오프: 구멍 해소 vs 피치 정확도. 청음 체감은 구멍 해소가 우선
+
+**다음 방향**:
+- 추가된 노트의 피치 정확도 개선 (mel_strict 회복)
+- confidence 0.35 노트에 대한 피치 보정 강화 검토
+- 8곡 전체 평가 필요
+
 (이전 v9~v21 이력은 git history 참조)

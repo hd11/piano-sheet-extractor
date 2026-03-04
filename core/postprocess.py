@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Vocal range limits (MIDI)
 VOCAL_RANGE_LOW = 48   # C3
-VOCAL_RANGE_HIGH = 84  # C6
+VOCAL_RANGE_HIGH = 96  # C7
 
 
 def postprocess_notes(

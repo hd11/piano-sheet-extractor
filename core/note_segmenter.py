@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def segment_notes(
     contour: F0Contour,
     min_note_duration: float = 0.06,
-    max_gap_frames: int = 5,
+    max_gap_frames: int = 10,
 ) -> List[Note]:
     """Convert an F0 contour into a list of discrete Note objects.
 
@@ -48,7 +48,8 @@ def segment_notes(
     midi = np.zeros(len(freqs), dtype=int)
     midi[voiced] = np.round(12.0 * np.log2(freqs[voiced] / 440.0) + 69.0).astype(int)
 
-    # Bridge small gaps: fill short unvoiced spans when surrounded by same pitch
+    # Bridge small gaps: fill short unvoiced spans when surrounded by similar pitch
+    # Tolerance of +-2 semitones to handle vibrato (e.g. MIDI 72->0->73)
     i = 0
     while i < len(midi):
         if midi[i] == 0:
@@ -59,7 +60,7 @@ def segment_notes(
             if gap_len <= max_gap_frames and gap_start > 0 and i < len(midi):
                 left_pitch = midi[gap_start - 1]
                 right_pitch = midi[i]
-                if left_pitch == right_pitch and left_pitch > 0:
+                if left_pitch > 0 and right_pitch > 0 and abs(left_pitch - right_pitch) <= 2:
                     midi[gap_start:i] = left_pitch
         else:
             i += 1
