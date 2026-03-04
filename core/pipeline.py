@@ -3,7 +3,11 @@
 Single entry point: extract_melody(mp3_path) -> List[Note]
 No reference data enters this module. MP3 is the only input.
 
-Pipeline:
+Pipeline (SOME mode - default):
+  MP3 -> vocal_separator (Demucs) -> SOME (end-to-end singing-to-MIDI)
+      -> postprocess -> musicxml_writer -> output.musicxml
+
+Pipeline (CREPE mode - fallback):
   MP3 -> vocal_separator (Demucs) -> pitch_extractor (CREPE)
       -> note_segmenter -> postprocess -> musicxml_writer -> output.musicxml
 """
@@ -16,6 +20,7 @@ import librosa
 import numpy as np
 
 from .musicxml_writer import save_musicxml
+from .note_extractor_some import extract_notes_some
 from .note_segmenter import segment_notes
 from .pitch_extractor import extract_f0
 from .postprocess import postprocess_notes

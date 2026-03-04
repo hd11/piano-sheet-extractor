@@ -19,7 +19,7 @@ def extract_f0(
     audio: np.ndarray,
     sr: int,
     step_size_ms: int = 10,
-    confidence_threshold: float = 0.35,
+    confidence_threshold: float = 0.40,
 ) -> F0Contour:
     """Extract fundamental frequency contour using CREPE.
 

@@ -337,4 +337,127 @@ BPM=180 곡의 리듬 해상도를 절반으로 낮춘 것이 원인.
 - 추가된 노트의 피치 정확도 개선 (mel_strict 회복)
 - confidence 0.35 노트에 대한 피치 보정 강화 검토
 
+### v6 Quality Fix (2026-03-04) — 잡음 제거 + gap bridge 정밀화 + confidence 조정
+
+**이유**: v5 청음 피드백 "매꿔야 할 데는 안 매꿔지고, 필요 없는 곳에 노트 추가됨".
+music-melody-expert 분석 결과:
+- 추출 578노트 vs 참조 486노트 (92개 초과 — FP 과다)
+- FP 186개 중 60.8%가 16분음표 이하의 극히 짧은 잡음 노트
+- 비조성 노트 67개 (A major에서 C/F/G 등 — CREPE 저신뢰 피치 오차)
+- gap bridging ±2st가 서로 다른 노트 경계를 합쳐 8분음표 프레이즈 파괴
+- flat bias: exact pitch 41.6%, -2st 22.2%, -1st 13.5%
+
+**근본 원인**: v5의 3가지 변경(confidence 0.5→0.35, gap bridge ±2st/10frames, range 84→96)이
+모두 과도하게 공격적 → 구멍은 일부만 메꿔지고 잡음 대량 유입
+
+**변경 사항**:
+1. `core/pitch_extractor.py` — confidence 0.35→0.40 (FP/FN 절충)
+2. `core/note_segmenter.py` — gap bridging 조건 강화:
+   - 같은 피치: 기존대로 bridge (max_gap_frames=10)
+   - 다른 피치(±2st): gap≤3 frames(30ms)일 때만 bridge (짧은 비브라토만 허용)
+   - 이외: bridge 안 함 (노트 경계 보존)
+3. `core/postprocess.py` — diatonic gate 추가:
+   - key 감지 후 비조성+짧은(0.15s 미만) 노트 제거
+   - 자체 key 추정 (노트 chroma histogram 기반)
+   - ARCHITECTURE GUARD 준수 (참조 데이터 미사용)
+
+**8곡 전체 평가 결과 (v6 vs v3 step4)**:
+
+| 지표 | v2 baseline | v3 step4 | **v6** | v2→v6 |
+|------|-------------|----------|--------|-------|
+| mel_strict | 0.040 | 0.066 | **0.067** | +68% |
+| mel_lenient | 0.106 | 0.173 | **0.191** | +80% |
+| pc_f1 | 0.158 | 0.189 | **0.209** | +32% |
+| onset_f1 | 0.417 | 0.481 | **0.470** | +13% |
+| chroma | 0.972 | 0.969 | **0.972** | 0% |
+| contour | 0.767 | 0.786 | **0.788** | +3% |
+
+**곡별 변화 (v3→v6)**:
+- 개선 6곡: Golden, 너에게100퍼센트, 등불을 지키다, 비비드라라러브, 여름이었다, 꿈의 버스(lenient)
+- 유사 1곡: IRIS OUT
+- 하락 1곡: 달리 (mel_strict 0.158→0.117, diatonic gate가 17% 노트 과다 제거)
+
+**범용성 판정**: 과적합 아님 — 8곡 중 6곡 개선, mel_lenient 평균 +10%
+
+**Diatonic gate 관찰**:
+- 꿈의 버스: A major 정확, 52/469 제거 (11%) — 적절
+- IRIS OUT: A major 추정, 95/447 제거 (21%) — 과다 가능성
+- 달리: C# major 추정, 162/953 제거 (17%) — 과다, strict 하락 원인
+- 등불을 지키다: G# major 추정, 83/508 제거 (16%)
+
+### v6 심층 분석 (2026-03-04) — 참조 멜로디 vs 추출 비교 (3곡)
+
+**분석 방법**: music-melody-expert 에이전트가 꿈의 버스, Golden, 너에게100퍼센트의 참조 멜로디와 v6 추출 결과를 비교 (패턴 분석용, Rule 2 준수)
+
+**3곡 공통 문제 패턴 5가지**:
+
+1. **Pitch Compression** — 고음/저음이 중앙으로 끌림
+   - self_octave_correction(threshold=7)이 정상적 7-10st 도약을 오판하여 -12st 보정
+   - 너에게100퍼센트: ref MIDI 85,87 노트 전부 손실 (ext max 84)
+   - global_octave_adjust vocal_center=75 고정 (실제 곡 median 76-80)
+
+2. **CREPE Harmonic Confusion** — 4th/5th 간격(5st, 7st) 오추정
+   - Golden: matched notes 37%가 quartal error, 너에게100퍼센트: 28%
+   - 옥타브 오류와 전혀 다른 유형 (2nd/3rd harmonic partial lock)
+   - Viterbi decoding으로도 해결 안 됨
+
+3. **Micro-artifacts** — 34-36% 노트가 최소 grid 길이 (참조에는 0개)
+   - min_note_duration 0.06s가 너무 낮아 jitter artifact 통과
+   - 참조 최단: 0.082-0.189s (BPM에 따라)
+
+4. **Phrase-level Gaps** — FN의 71-82%가 구간 통째로 누락
+   - Demucs 보컬 분리 실패 구간에서 confidence 전체 하락
+
+5. **BPM 오추정** — Golden: 123 vs 실제 183 (3:2 비율, 치명적)
+   - 현재 disambiguation이 BPM<100일 때만 2:1 검증
+   - 3:2 ratio 미대응, BPM>=100 구간 미검증
+
+**폐기한 시도 (v7)**:
+- P2 Harmonic correction (±5/7st context 기반 보정): 정상적 melodic leap까지 보정 → 꿈의 버스 0.032→0.002, 너에게100퍼센트 0.050→0.000. 평균 mel_strict 0.067→0.047
+- P4 threshold 7→10: octave correction이 느슨해져 오히려 하락
+- P5 dynamic vocal_center: CREPE 서브하모닉 피치의 weighted avg를 center로 쓰면 octave shift 방향 오판 → 꿈의 버스 0.032→0.005, 너에게100퍼센트 0.050→0.000
+- **교훈**: CREPE 출력 자체가 이미 왜곡되어 있으므로, 왜곡된 데이터 기반의 자기참조 보정은 오류를 증폭함. 외부 기준(고정 center, 고정 threshold)이 더 안정적
+
+**폐기한 시도 (v8 FCPE)**:
+- FCPE(torchfcpe) 단독으로 CREPE 대체: mel_strict 0.067→0.055, mel_lenient 0.191→0.138
+- 너에게100퍼센트, 비비드라라러브에서 개선이나 달리 대폭 하락(0.117→0.033)
+- 속도는 5-15배 빠름(곡당 1-5초). 일부 곡에서 CREPE와 보완적이나 단독으로는 부족
+
+**폐기한 시도 (v9 Highpass+CQT)**:
+- 100Hz highpass filter + CQT spectral energy 기반 octave verification
+- mel_strict 0.067→0.021 (-69%), mel_lenient 0.191→0.075 (-61%)
+- CQT octave verify가 41% 노트를 보정하며 올바른 옥타브를 잘못된 쪽으로 이동
+- CQT 에너지에서 서브하모닉/배음 구분이 안 됨 — 원래 기대한 "CQT gives correct register"가 isolated vocal에서도 안정적이지 않음
+- **교훈**: 피치 보정 방향의 접근은 전반적으로 한계. 보정할수록 악화됨
+
+**8곡 전체 추가 분석 (나머지 5곡)**:
+
+추가 패턴 3가지 발견:
+- [F] Boundary Overflow: 비비드에서 곡 종료 후 83초간 122개 잡음 노트 (Demucs 악기 오인)
+- [G] Same-pitch Repetition Loss: **전체 8곡** 평균 22pp 손실 (merge_same_pitch가 re-attack 무시)
+- [H] Grid Threshold Edge: IRIS OUT (BPM=136) 140 임계값 바로 아래 → 89.5% 동일 duration
+
+8곡 패턴 분포: Pitch Compression 6/8, Quartal>15% 5/8, Grid Lock 4/8, Phrase Gaps 4/8, BPM err 2/8, Same-pitch Loss **8/8**
+
+**폐기한 시도 (v10 SOME end-to-end)**:
+- SOME (Singing-Oriented MIDI Extractor) — 중국어 노래 5명 데이터로 훈련된 end-to-end 모델
+- CREPE+segmenter를 SOME으로 완전 대체 (F0 추출 + 노트 분할 모두 SOME이 수행)
+- mel_strict 0.067→0.033 (-51%), mel_lenient 0.191→0.091 (-52%)
+- contour만 0.767→0.801 (+4%) 개선 — 멜로디 윤곽은 더 정확하나 pitch/timing 매칭 저조
+- 원인: (1) 중국어 노래 훈련 → 한국 팝 일반화 부족, (2) 후처리가 CREPE 오류 패턴에 맞춰져 있어 SOME 출력과 충돌
+- 파일: core/note_extractor_some.py (파이프라인에서 미사용, 참고용)
+
+**다음 방향 (우선순위순, 8곡 데이터 기반, 모두 범용/참조 미사용)**:
+1. **RMVPE F0 추출기** — subharmonic에 강한 별도 F0 모델 (가중치 다운로드 필요: github.com/yxlllc/RMVPE)
+2. [G] Same-pitch re-attack — amplitude envelope로 re-attack 감지 (8/8곡)
+3. [P3+H] Grid 개선 — BPM-adaptive min_note_duration (4/8곡)
+4. [P1] BPM disambiguation — 다중 ratio 후보 검증 (2/8곡)
+5. [F] Boundary overflow — energy envelope 기반 곡 끝 감지 (1/8곡)
+
+**아키텍처 변경 필요성 확인 (v7~v10 6회 실패)**:
+- CREPE 파라미터 튜닝 한계 도달 (v6 mel_strict=0.067이 ceiling)
+- 후처리 기반 pitch 보정 전부 실패 (v7 harmonic, v7b dynamic center, v9 CQT)
+- 대안 F0 추출기 단독 사용도 부족 (v8 FCPE, v10 SOME)
+- 남은 유망 경로: RMVPE (subharmonic 전용 설계), CREPE+FCPE 앙상블
+
 (이전 v9~v21 이력은 git history 참조)

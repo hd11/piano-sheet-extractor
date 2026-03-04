@@ -54,6 +54,7 @@ def postprocess_notes(
     notes = _global_octave_adjust(notes)
     notes = _self_octave_correction(notes)
     notes = _clip_vocal_range(notes)
+    notes = _diatonic_gate(notes)
 
     # Beat-aligned onset snapping (self-contained, uses audio only)
     # Adaptive subdivisions: fast songs (>=140 BPM) use 16th notes, slow songs use 8th notes
@@ -148,6 +149,190 @@ def _merge_same_pitch(
         )
 
     return merged
+
+
+def _harmonic_correction(
+    notes: List[Note],
+    context_window: int = 5,
+    max_duration: float = 0.3,
+) -> List[Note]:
+    """Correct CREPE harmonic confusion (4th/5th lock).
+
+    CREPE sometimes locks onto the 2nd or 3rd harmonic partial instead
+    of the fundamental, causing pitch errors of exactly +5st (perfect 4th),
+    +7st (perfect 5th), -5st, or -7st. This function detects such jumps
+    by comparing each note to its surrounding context and reverses
+    the harmonic shift if it brings the note closer to the local median.
+
+    Only short notes (< max_duration) are corrected to avoid changing
+    intentional melodic leaps.
+
+    Self-contained: uses only extracted notes, no reference data.
+
+    Args:
+        notes: Input notes.
+        context_window: Half-window for local median computation.
+        max_duration: Only correct notes shorter than this (seconds).
+
+    Returns:
+        Notes with harmonic errors corrected.
+    """
+    if len(notes) < 5:
+        return notes
+
+    harmonic_intervals = [5, 7, -5, -7]
+    pitches = np.array([n.pitch for n in notes])
+    corrected = pitches.copy()
+    corrections = 0
+
+    for i in range(len(notes)):
+        if notes[i].duration >= max_duration:
+            continue
+
+        # Compute local median excluding current note
+        lo = max(0, i - context_window)
+        hi = min(len(notes), i + context_window + 1)
+        context_pitches = np.concatenate([pitches[lo:i], pitches[i+1:hi]])
+        if len(context_pitches) < 3:
+            continue
+        local_median = float(np.median(context_pitches))
+
+        current_dist = abs(pitches[i] - local_median)
+        if current_dist < 4:
+            # Already close to context, skip
+            continue
+
+        # Try reversing each harmonic interval
+        best_pitch = pitches[i]
+        best_dist = current_dist
+        for interval in harmonic_intervals:
+            candidate = pitches[i] - interval  # reverse the suspected shift
+            dist = abs(candidate - local_median)
+            if dist < best_dist and VOCAL_RANGE_LOW <= candidate <= VOCAL_RANGE_HIGH:
+                best_dist = dist
+                best_pitch = candidate
+
+        if best_pitch != pitches[i]:
+            corrected[i] = best_pitch
+            corrections += 1
+
+    if corrections > 0:
+        logger.info(
+            "Harmonic correction: %d/%d notes corrected (4th/5th lock)",
+            corrections,
+            len(notes),
+        )
+
+    return [
+        Note(
+            pitch=int(corrected[i]),
+            onset=n.onset,
+            duration=n.duration,
+            velocity=n.velocity,
+        )
+        for i, n in enumerate(notes)
+    ]
+
+
+def _cqt_octave_verify(
+    notes: List[Note],
+    audio: np.ndarray,
+    sr: int,
+) -> List[Note]:
+    """Verify/correct octave using CQT spectral energy.
+
+    CREPE's chroma (note name) is generally accurate but octave register
+    is often wrong due to subharmonic locking. CQT gives correct pitch
+    register because it measures actual spectral energy at each frequency.
+
+    For each note, compute CQT energy at the current octave and ±1 octave,
+    then pick the octave with the highest energy. Only the octave changes;
+    the chroma (note name) is preserved.
+
+    Self-contained: uses only extracted notes and source audio.
+
+    Args:
+        notes: Input notes (after global octave adjust).
+        audio: Vocal audio signal.
+        sr: Sample rate.
+
+    Returns:
+        Notes with octave verified/corrected by CQT energy.
+    """
+    if len(notes) < 5 or len(audio) == 0:
+        return notes
+
+    # Compute CQT: 6 octaves from C2 (MIDI 36) to B7 (MIDI 107)
+    # This covers the full vocal range
+    n_bins = 72  # 6 octaves * 12 bins/octave
+    fmin = librosa.midi_to_hz(36)  # C2
+    C = np.abs(librosa.cqt(
+        y=audio.astype(np.float32),
+        sr=sr,
+        hop_length=512,
+        fmin=fmin,
+        n_bins=n_bins,
+        bins_per_octave=12,
+    ))
+
+    cqt_times = librosa.frames_to_time(np.arange(C.shape[1]), sr=sr, hop_length=512)
+    corrections = 0
+    result = []
+
+    for n in notes:
+        # Find CQT frames for this note's time span
+        t_start = n.onset
+        t_end = n.onset + n.duration
+        frame_start = np.searchsorted(cqt_times, t_start)
+        frame_end = np.searchsorted(cqt_times, t_end)
+        if frame_end <= frame_start:
+            frame_end = frame_start + 1
+        frame_end = min(frame_end, C.shape[1])
+        frame_start = min(frame_start, C.shape[1] - 1)
+
+        # Get average CQT energy for this time span
+        segment = C[:, frame_start:frame_end]
+        if segment.size == 0:
+            result.append(n)
+            continue
+        avg_energy = segment.mean(axis=1)
+
+        # Current pitch -> CQT bin index
+        current_midi = n.pitch
+        chroma = current_midi % 12
+        base_midi = 36  # CQT starts at MIDI 36
+
+        # Check energy at current octave and ±1 octave (same chroma)
+        best_midi = current_midi
+        best_energy = -1.0
+
+        for shift in [-12, 0, 12]:
+            candidate_midi = current_midi + shift
+            bin_idx = candidate_midi - base_midi
+            if 0 <= bin_idx < n_bins and VOCAL_RANGE_LOW <= candidate_midi <= VOCAL_RANGE_HIGH:
+                energy = float(avg_energy[bin_idx])
+                if energy > best_energy:
+                    best_energy = energy
+                    best_midi = candidate_midi
+
+        if best_midi != current_midi:
+            corrections += 1
+
+        result.append(Note(
+            pitch=best_midi,
+            onset=n.onset,
+            duration=n.duration,
+            velocity=n.velocity,
+        ))
+
+    if corrections > 0:
+        logger.info(
+            "CQT octave verify: %d/%d notes corrected",
+            corrections,
+            len(notes),
+        )
+
+    return result
 
 
 def _self_octave_correction(
@@ -321,6 +506,62 @@ def _clip_vocal_range(notes: List[Note]) -> List[Note]:
             VOCAL_RANGE_HIGH,
         )
     return clipped
+
+
+def _diatonic_gate(
+    notes: List[Note],
+    max_chromatic_duration: float = 0.15,
+) -> List[Note]:
+    """Remove short out-of-key notes (likely CREPE artifacts).
+
+    Estimates key from note chroma histogram, then removes notes that
+    are both chromatic (out-of-key) and short. Longer chromatic notes
+    are kept as they may be intentional accidentals.
+
+    Self-contained: uses only extracted notes, no reference data.
+
+    Args:
+        notes: Input notes.
+        max_chromatic_duration: Max duration (seconds) for a chromatic note
+            to be considered an artifact and removed.
+
+    Returns:
+        Filtered notes with short chromatic artifacts removed.
+    """
+    if len(notes) < 10:
+        return notes
+
+    # Estimate key from chroma histogram (weighted by duration)
+    chroma_weight = np.zeros(12)
+    for n in notes:
+        chroma_weight[n.pitch % 12] += n.duration
+
+    # Major scale template matching (Krumhansl-Kessler simplified)
+    major_intervals = [0, 2, 4, 5, 7, 9, 11]
+    best_root = 0
+    best_score = -1.0
+    for root in range(12):
+        score = sum(chroma_weight[(root + iv) % 12] for iv in major_intervals)
+        if score > best_score:
+            best_score = score
+            best_root = root
+
+    key_chromas = {(best_root + iv) % 12 for iv in major_intervals}
+    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    logger.info("Diatonic gate: estimated key = %s major", note_names[best_root])
+
+    filtered = []
+    removed = 0
+    for n in notes:
+        if n.pitch % 12 not in key_chromas and n.duration < max_chromatic_duration:
+            removed += 1
+            continue
+        filtered.append(n)
+
+    if removed > 0:
+        logger.info("Diatonic gate: %d/%d short chromatic notes removed", removed, len(notes))
+
+    return filtered
 
 
 def _snap_to_beats(

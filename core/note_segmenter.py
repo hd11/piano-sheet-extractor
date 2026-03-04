@@ -49,7 +49,8 @@ def segment_notes(
     midi[voiced] = np.round(12.0 * np.log2(freqs[voiced] / 440.0) + 69.0).astype(int)
 
     # Bridge small gaps: fill short unvoiced spans when surrounded by similar pitch
-    # Tolerance of +-2 semitones to handle vibrato (e.g. MIDI 72->0->73)
+    # Same pitch: bridge up to max_gap_frames (10 frames = 100ms)
+    # Different pitch (±2st): bridge only very short gaps (≤3 frames = 30ms) to preserve note boundaries
     i = 0
     while i < len(midi):
         if midi[i] == 0:
@@ -57,11 +58,18 @@ def segment_notes(
             while i < len(midi) and midi[i] == 0:
                 i += 1
             gap_len = i - gap_start
-            if gap_len <= max_gap_frames and gap_start > 0 and i < len(midi):
+            if gap_start > 0 and i < len(midi):
                 left_pitch = midi[gap_start - 1]
                 right_pitch = midi[i]
-                if left_pitch > 0 and right_pitch > 0 and abs(left_pitch - right_pitch) <= 2:
-                    midi[gap_start:i] = left_pitch
+                if left_pitch > 0 and right_pitch > 0:
+                    if left_pitch == right_pitch and gap_len <= max_gap_frames:
+                        # Same pitch: bridge freely
+                        midi[gap_start:i] = left_pitch
+                    elif abs(left_pitch - right_pitch) <= 2 and gap_len <= 3:
+                        # Similar pitch, very short gap: split bridge
+                        mid = gap_start + gap_len // 2
+                        midi[gap_start:mid] = left_pitch
+                        midi[mid:i] = right_pitch
         else:
             i += 1
 
