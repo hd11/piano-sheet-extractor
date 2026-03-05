@@ -623,82 +623,53 @@ f0_hz = rmvpe.infer_from_audio(audio_16k, thred=0.03)
 - 생성/참조 노트 시퀀스가 근본적으로 다름 → vocal-to-sheet-music gap
 - MusicXML writer 양자화: BPM<140에서 8분음표 그리드 사용 → max error 110-134ms (>50ms!)
 
-### v22 Fine Grid + Mix Beat Tracking (2026-03-05) — MusicXML 양자화 + 믹스 비트
+### v15 Fine Grid + Mix Beat Tracking (2026-03-05) — MusicXML 양자화 + 믹스 비트 탐색
 
 **이유**: v14 분석에서 BPM<140 곡들의 MusicXML 양자화 오차가 50ms 초과 발견.
-8분음표 그리드(grid_mult=2)의 max error가 110-134ms → mel_strict 50ms tolerance 초과.
-또한 보컬 전용 beat tracking보다 원본 믹스(드럼/베이스 포함)가 더 정확한 비트 추적 가능.
+8분음표 그리드의 max error가 110-134ms → mel_strict 50ms tolerance를 초과함.
+보컬 전용 beat tracking보다 원본 믹스(드럼/베이스 포함)가 더 정확한 비트 추적 가능.
 
-**변경 사항**:
-1. `core/musicxml_writer.py` — 동적 양자화 그리드
-   - `grid_mult > 600/bpm`, 2의 거듭제곱으로 올림
-   - BPM=112: 32분음표(grid_mult=8, max_err=33ms)
-   - BPM=136: 32분음표(grid_mult=8, max_err=28ms)
-   - BPM=180: 16분음표(grid_mult=4, max_err=21ms)
+**탐색 실험 (전부 포함)**:
+| 실험 | 내용 | mel_strict | 결과 |
+|------|------|-----------|------|
+| v15 | quantized seg + old grid | 0.057 | 폐기 |
+| v16 | quantized seg + fine grid | 0.056 | 폐기 |
+| v17 | free seg + fine grid | 0.065 | 개선 |
+| v17b | no postprocess | 0.011 | 폐기 (postprocess 필수 확인) |
+| v18 | beat snap 제거 | 0.054 | 폐기 (beat snap 필요 확인) |
+| v19 | v17 재확인 | 0.065 | 확인 |
+| v20 | CQT octave verify | 0.015 | 폐기 (치명적 악화) |
+| v21 | harmonic correction | 0.054 | 폐기 (FCPE에 불필요) |
+| **v22** | **free seg + fine grid + mix beats** | **0.074** | **채택** |
+| v23 | subdivisions=4 전체 | 0.066 | 폐기 (slow songs 악화) |
+
+**최종 채택 변경 사항**:
+1. `core/musicxml_writer.py` — 동적 양자화 그리드 (`grid_mult > 600/bpm`, 2의 거듭제곱)
+   - BPM=112: 32분음표(max_err=33ms), BPM=180: 16분음표(max_err=21ms)
    - 모든 곡에서 max error < 50ms 보장
-2. `core/pipeline.py` — 원본 믹스에서 비트 추적
-   - `librosa.load(mp3_path)` → `beat_track()` → beat_times 생성
-   - BPM 추정도 믹스에서 수행 (보컬보다 일관성)
-   - beat_times를 postprocess에 전달
-3. `core/postprocess.py` — `_snap_to_beats_from_grid()` 추가
-   - 외부 제공 beat_times 직접 사용 (내부 beat tracking 불필요)
-   - adaptive subdivisions 유지 (BPM>=140: 4, else: 2)
-4. `core/note_segmenter.py` — `segment_notes_quantized()` 추가 (미사용)
-   - BPM 기반 그리드로 F0 직접 양자화하는 대안 세그먼터
-   - 실험 결과 free segmenter가 더 우수하여 채택하지 않음
+2. `core/pipeline.py` — 원본 믹스에서 BPM 추정 + beat tracking
+3. `core/postprocess.py` — `_snap_to_beats_from_grid()` (외부 beat_times 직접 사용)
 
-**실험 과정 (v15~v22)**:
-- v15 quantized seg + old grid: 0.057 (lateral)
-- v16 quantized seg + fine grid: 0.056 (lateral)
-- v17 free seg + fine grid: 0.065 (+8% from 0.060)
-- v17b no postprocess: 0.011 → postprocessing 필수 확인
-- v18 no beat snap: 0.054 → beat snap 필요 확인
-- v19 = v17 재확인: 0.065
-- v20 CQT octave verify: 0.015 → 치명적 악화, 폐기
-- v21 harmonic correction: 0.054 → FCPE에 불필요, 폐기
-- **v22 free seg + fine grid + mix beats: 0.074** (best!)
-- v23 subdivisions=4 all: 0.066 → slow songs 악화, 폐기
+**결과 (v22 기준, 8곡 평균)**:
 
-**최종 결과 (v22, FCPE mode)**:
-
-| 곡 | mel_strict | mel_lenient | onset_f1 | notes |
-|----|-----------|-------------|----------|-------|
-| Golden | 0.008 | 0.049 | 0.408 | 359/588 |
-| IRIS OUT | **0.299** | 0.325 | 0.562 | 330/734 |
-| 꿈의 버스 | 0.043 | 0.117 | 0.478 | 410/477 |
-| 너에게100퍼센트 | 0.080 | 0.202 | 0.472 | 448/649 |
-| 달리 표현할 수 없어요 | 0.016 | 0.132 | 0.437 | 616/607 |
-| 등불을 지키다 | 0.049 | 0.061 | 0.495 | 366/653 |
-| 비비드라라러브 | 0.027 | 0.069 | 0.311 | 355/455 |
-| 여름이었다 | 0.069 | 0.151 | 0.454 | 419/625 |
-| **평균** | **0.074** | **0.138** | **0.452** | - |
-
-**v6 baseline(CREPE) → v22(FCPE) 비교**:
-| 지표 | v6 (CREPE) | v22 (FCPE) | 변화 |
-|------|-----------|-----------|------|
-| mel_strict | 0.067 | **0.074** | +10% |
-| 시간/곡 | ~25분 | **~2초** | **750x** |
+| 곡 | mel_strict | onset_f1 | notes |
+|----|-----------|----------|-------|
+| Golden | 0.008 | 0.408 | 359/588 |
+| IRIS OUT | **0.299** | 0.562 | 330/734 |
+| 꿈의 버스 | 0.043 | 0.478 | 410/477 |
+| 너에게100퍼센트 | 0.080 | 0.472 | 448/649 |
+| 달리 표현할 수 없어요 | 0.016 | 0.437 | 616/607 |
+| 등불을 지키다 | 0.049 | 0.495 | 366/653 |
+| 비비드라라러브 | 0.027 | 0.311 | 355/455 |
+| 여름이었다 | 0.069 | 0.454 | 419/625 |
+| **평균** | **0.074** | **0.452** | - |
 
 **핵심 발견**:
-- MusicXML 양자화가 50ms mel_strict에 치명적 영향 (4/8곡에서 grid error > 50ms)
-- 원본 믹스 비트가 보컬 비트보다 onset snapping에 효과적
-- CQT octave verify, harmonic correction 모두 FCPE에서는 유해
-- Quantized segmenter < Free segmenter (자유 세그먼테이션이 우수)
-- Beat snap ON > OFF (mel_strict 기준)
-
-**남은 병목**:
-- **Vocal-to-sheet-music gap**: 보컬 멜로디와 피아노 편곡이 근본적으로 다른 노트 시퀀스
-  - 꿈의 버스: 6/450 notes만 exact match (1.3%)
-  - 생성 첫 노트 D5,B4,C#5 vs 참조 A5,B5,A5 → 완전히 다른 멜로디
-  - chroma_similarity=0.990 but 개별 노트 매칭은 극히 낮음
-- **BPM 오차**: 꿈의 버스 est=172 vs ref=180 (4.4%), 여름이었다 동일
-- **Golden**: mel_strict=0.008 (최하위) — BPM=123 vs ref=122는 정확하나 멜로디 불일치 심각
-
-**다음 방향**:
-1. RMVPE 재시도 (네트워크 가능 시)
-2. Vocal-to-sheet gap 축소: 참조 분석 기반 세그먼테이션 전략 개선
-3. BPM 정밀도 향상 (librosa.beat.tempo 대안 탐색)
-4. CREPE+FCPE 앙상블 (각 곡에서 더 나은 결과 선택)
+- MusicXML 양자화 오차가 mel_strict에 치명적 (8분음표 그리드 → 50ms 초과)
+- 믹스 비트가 보컬 비트보다 onset snapping에 효과적
+- CQT octave verify, harmonic correction 모두 FCPE에서 유해
+- Quantized segmenter < Free segmenter (자유 세그먼테이션 우수)
+- FCPE: CREPE 대비 750x 빠르고 mel_strict +10% 우수
 
 ### v24 Dedup + BPM 3:2 초기 적용 (2026-03-05) — onset 충돌 제거 + 템포 보정
 
