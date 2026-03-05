@@ -491,7 +491,54 @@ music-melody-expert 분석 결과:
 - 참조 불침투: audio만 사용, ref 파라미터 없음
 - 8곡 전체 평가: 실행 중 (results/v11_reattack.json)
 
-**8곡 전체 평가 결과**: (평가 완료 후 기록)
+**v11 꿈의 버스 단일곡 결과 (re-attack)**:
+
+| 메트릭 | v6 | v11 | 변화 |
+|--------|-----|------|------|
+| mel_strict | 0.049 | 0.032 | -35% |
+| mel_lenient | 0.137 | 0.106 | -23% |
+| onset_f1 | 0.488 | 0.466 | -5% |
+| notes | 429/477 | 411/477 | |
+
+- re-attack 감지: 4개만 감지됨 (dip_threshold=0.4 너무 엄격하거나 꿈의 버스에 same-pitch 반복 적음)
+- 노트 수 감소(482→411)로 오히려 하락. 다른 곡에서 효과 있을 수 있으나 이 곡에서는 비효과적
+
+### v12 Basic Pitch + CQT 테스트 (2026-03-05) — BP 파이프라인 재평가
+
+**이유**: 이전 git history(bcc2632)에서 BP+CQT로 mel_strict=0.425 달성 기록 발견.
+단, 당시는 time alignment 적용 구버전 평가 → v1 reset 후 엄격한 round-trip 평가로 재측정 필요.
+
+**변경 사항**:
+1. `core/note_extractor_bp.py` 신규 — Basic Pitch + CQT octave correction 추출기
+   - BP: raw + harmonic vocals 2회 추출 → intersection
+   - CQT: harmonic salience 기반 octave shift 결정
+   - weighted melody selection (동시 노트 중 velocity+continuity 최적 선택)
+2. `core/pipeline.py` — `mode` 파라미터 추가 ("bp" / "crepe")
+
+**꿈의 버스 결과 (round-trip 평가)**:
+
+| 메트릭 | CREPE (v6) | BP+CQT (v12) | 변화 |
+|--------|-----------|--------------|------|
+| mel_strict | 0.049 | 0.020 | -59% |
+| mel_lenient | 0.137 | 0.109 | -20% |
+| onset_f1 | 0.488 | 0.448 | -8% |
+| chroma | 0.993 | 0.996 | +0.3% |
+| notes | 429/477 | 327/477 | -24% |
+| **처리 시간** | ~1350s | **25.4s** | **53x 빠름** |
+
+**분석**:
+- BP가 분리된 보컬에서 노트 감지 부족 (327/477 = 69% 커버리지)
+- 이전 mel_strict=0.425는 time alignment 적용 결과로 부풀려진 수치 확인
+- BP는 범용 AMT이므로 isolated vocals 전용으로는 CREPE에 못 미침
+- 속도 53x 빠름 (25s vs 1350s) → 빠른 실험용으로 유용
+- **pipeline 기본값은 CREPE 유지**, BP는 mode="bp"로 사용 가능
+
+**상용 프로그램 조사 결과** (2026-03-05):
+- AnthemScore, Sing2Notes, ScoreCloud, Melodyne 등 비교 완료
+- 폴리포닉 보컬 멜로디 추출은 **업계 전체 미해결 과제**
+- 상용 툴도 복잡한 팝 음악에서 정확도 낮음
+- 학술 SOTA: ROSVOT(COnPOff F1=77.4%), T3MS(2025 최신)
+- 우리의 mel_strict=0.065는 엄격한 메트릭이므로 직접 비교 어려움
 
 **아키텍처 변경 필요성 확인 (v7~v10 6회 실패)**:
 - CREPE 파라미터 튜닝 한계 도달 (v6 mel_strict=0.067이 ceiling)
