@@ -605,4 +605,262 @@ f0_hz = rmvpe.infer_from_audio(audio_16k, thred=0.03)
 
 **기대 효과**: CREPE보다 서브하모닉 내성 강함, FCPE와 유사한 속도
 
+### v14 Experiments (2026-03-05) — 세그먼테이션 실험 (전부 무효)
+
+**시도한 것들** (전부 폐기):
+- 짧은 노트 병합 (_consolidate_short_notes, ±2st merge): mel_strict 0.035 → 악화
+- 같은 피치만 병합: mel_strict 0.025 → 악화
+- 전곡 subdivisions=4: mel_strict 0.059 → 변화 없음
+- Spectral onset detection: 23% vs F0 기반 39% (50ms) → 악화
+
+**심층 분석 결과**:
+- Onset offset: mean=-9.8ms, std=112ms → 체계적 편향 없음, 분산만 큼
+- 50ms tolerance에서 pitch+onset 동시 매칭: 겨우 2.7%
+- 생성/참조 노트 시퀀스가 근본적으로 다름 → vocal-to-sheet-music gap
+- MusicXML writer 양자화: BPM<140에서 8분음표 그리드 사용 → max error 110-134ms (>50ms!)
+
+### v22 Fine Grid + Mix Beat Tracking (2026-03-05) — MusicXML 양자화 + 믹스 비트
+
+**이유**: v14 분석에서 BPM<140 곡들의 MusicXML 양자화 오차가 50ms 초과 발견.
+8분음표 그리드(grid_mult=2)의 max error가 110-134ms → mel_strict 50ms tolerance 초과.
+또한 보컬 전용 beat tracking보다 원본 믹스(드럼/베이스 포함)가 더 정확한 비트 추적 가능.
+
+**변경 사항**:
+1. `core/musicxml_writer.py` — 동적 양자화 그리드
+   - `grid_mult > 600/bpm`, 2의 거듭제곱으로 올림
+   - BPM=112: 32분음표(grid_mult=8, max_err=33ms)
+   - BPM=136: 32분음표(grid_mult=8, max_err=28ms)
+   - BPM=180: 16분음표(grid_mult=4, max_err=21ms)
+   - 모든 곡에서 max error < 50ms 보장
+2. `core/pipeline.py` — 원본 믹스에서 비트 추적
+   - `librosa.load(mp3_path)` → `beat_track()` → beat_times 생성
+   - BPM 추정도 믹스에서 수행 (보컬보다 일관성)
+   - beat_times를 postprocess에 전달
+3. `core/postprocess.py` — `_snap_to_beats_from_grid()` 추가
+   - 외부 제공 beat_times 직접 사용 (내부 beat tracking 불필요)
+   - adaptive subdivisions 유지 (BPM>=140: 4, else: 2)
+4. `core/note_segmenter.py` — `segment_notes_quantized()` 추가 (미사용)
+   - BPM 기반 그리드로 F0 직접 양자화하는 대안 세그먼터
+   - 실험 결과 free segmenter가 더 우수하여 채택하지 않음
+
+**실험 과정 (v15~v22)**:
+- v15 quantized seg + old grid: 0.057 (lateral)
+- v16 quantized seg + fine grid: 0.056 (lateral)
+- v17 free seg + fine grid: 0.065 (+8% from 0.060)
+- v17b no postprocess: 0.011 → postprocessing 필수 확인
+- v18 no beat snap: 0.054 → beat snap 필요 확인
+- v19 = v17 재확인: 0.065
+- v20 CQT octave verify: 0.015 → 치명적 악화, 폐기
+- v21 harmonic correction: 0.054 → FCPE에 불필요, 폐기
+- **v22 free seg + fine grid + mix beats: 0.074** (best!)
+- v23 subdivisions=4 all: 0.066 → slow songs 악화, 폐기
+
+**최종 결과 (v22, FCPE mode)**:
+
+| 곡 | mel_strict | mel_lenient | onset_f1 | notes |
+|----|-----------|-------------|----------|-------|
+| Golden | 0.008 | 0.049 | 0.408 | 359/588 |
+| IRIS OUT | **0.299** | 0.325 | 0.562 | 330/734 |
+| 꿈의 버스 | 0.043 | 0.117 | 0.478 | 410/477 |
+| 너에게100퍼센트 | 0.080 | 0.202 | 0.472 | 448/649 |
+| 달리 표현할 수 없어요 | 0.016 | 0.132 | 0.437 | 616/607 |
+| 등불을 지키다 | 0.049 | 0.061 | 0.495 | 366/653 |
+| 비비드라라러브 | 0.027 | 0.069 | 0.311 | 355/455 |
+| 여름이었다 | 0.069 | 0.151 | 0.454 | 419/625 |
+| **평균** | **0.074** | **0.138** | **0.452** | - |
+
+**v6 baseline(CREPE) → v22(FCPE) 비교**:
+| 지표 | v6 (CREPE) | v22 (FCPE) | 변화 |
+|------|-----------|-----------|------|
+| mel_strict | 0.067 | **0.074** | +10% |
+| 시간/곡 | ~25분 | **~2초** | **750x** |
+
+**핵심 발견**:
+- MusicXML 양자화가 50ms mel_strict에 치명적 영향 (4/8곡에서 grid error > 50ms)
+- 원본 믹스 비트가 보컬 비트보다 onset snapping에 효과적
+- CQT octave verify, harmonic correction 모두 FCPE에서는 유해
+- Quantized segmenter < Free segmenter (자유 세그먼테이션이 우수)
+- Beat snap ON > OFF (mel_strict 기준)
+
+**남은 병목**:
+- **Vocal-to-sheet-music gap**: 보컬 멜로디와 피아노 편곡이 근본적으로 다른 노트 시퀀스
+  - 꿈의 버스: 6/450 notes만 exact match (1.3%)
+  - 생성 첫 노트 D5,B4,C#5 vs 참조 A5,B5,A5 → 완전히 다른 멜로디
+  - chroma_similarity=0.990 but 개별 노트 매칭은 극히 낮음
+- **BPM 오차**: 꿈의 버스 est=172 vs ref=180 (4.4%), 여름이었다 동일
+- **Golden**: mel_strict=0.008 (최하위) — BPM=123 vs ref=122는 정확하나 멜로디 불일치 심각
+
+**다음 방향**:
+1. RMVPE 재시도 (네트워크 가능 시)
+2. Vocal-to-sheet gap 축소: 참조 분석 기반 세그먼테이션 전략 개선
+3. BPM 정밀도 향상 (librosa.beat.tempo 대안 탐색)
+4. CREPE+FCPE 앙상블 (각 곡에서 더 나은 결과 선택)
+
+### v25 Parameter Tuning + BPM 3:2 (2026-03-05) — 포스트프로세싱 최적화
+
+**이유**: v22 mel_strict=0.074에서 추가 개선 탐색. 진단 분석 수행:
+1. MusicXML note loss: Golden 18.6%, 등불을 지키다 17.2%, 달리 14.7% — beat snap이 노트를 같은 grid point로 이동시켜 82개 onset 충돌 발생
+2. BPM 3:2 오류: Golden librosa BPM=123, 실제 ref=183 (3:2 비율). 기존 2:1 검증만 있어 미감지
+3. Vocal-to-sheet gap 심층 분석: onset 매칭된 노트 중 exact pitch match 비율이 10-27%에 불과 (IRIS OUT만 52%). chroma_similarity=0.974이지만 노트별 chroma match는 14-27% — 보컬과 피아노 편곡이 같은 key를 사용하나 다른 노트 시퀀스
+
+**변경 사항**:
+
+1. `core/postprocess.py` — `_dedup_close_onsets()` 추가
+   - beat snap 후 30ms 미만 간격 노트 충돌 제거
+   - 충돌 시 더 긴 duration의 노트 유지 (vs MusicXML writer의 highest pitch)
+   - 효과: MusicXML round-trip note loss 0%로 감소 (이전: 18.6%)
+
+2. `core/pipeline.py` — `_estimate_bpm_from_audio()` 3:2 BPM 보정 추가
+   - BPM 100-140 범위에서 onset autocorrelation 3:2 비율 검증
+   - ac[triple_lag]/ac[bpm_lag] > 0.75이면 BPM × 1.5 적용
+   - bpm*1.5 > 200 제한으로 달리(136*1.5=204) 오보정 방지
+   - Golden: 123 → 185 BPM 보정 (ref=183)
+
+3. `core/postprocess.py` — `_remove_outliers()` threshold 9 → 14
+   - ablation 결과: t14가 최적 (avg 0.0806 vs t9 0.0751, +7.3%)
+   - t16에서 IRIS OUT 0.305→0.078 급락 → t14와 t16 사이에 cliff
+   - 모든 곡 개선 또는 유지, 퇴보 없음
+
+**실험 데이터**:
+
+Outlier threshold ablation (8곡 평균 mel_strict):
+| threshold | avg | Golden | IRIS OUT | 달리 |
+|-----------|------|--------|----------|------|
+| 9 (기존) | 0.0751 | 0.014 | 0.301 | 0.016 |
+| 12 | 0.0768 | 0.015 | 0.306 | 0.016 |
+| **14** | **0.0806** | **0.026** | **0.305** | **0.034** |
+| 16 | 0.0521 | 0.026 | 0.078 | 0.034 |
+
+Postprocess ablation (v25 base):
+- no_diatonic: avg=0.0796 (-1.2%) → 유지
+- no_self_octave: avg=0.0736 (-8.7%) → 유지
+- no_outlier: avg=0.0518 (-35.7%) → 유지 (IRIS OUT 급락)
+- self_octave threshold 7→9/10/12: 모두 하락 → 7 유지
+
+**v25 최종 결과 (FCPE mode)**:
+
+| 곡 | mel_strict | mel_lenient | onset_f1 | notes |
+|----|-----------|-------------|----------|-------|
+| Golden | 0.026 | 0.070 | 0.445 | 473/588 |
+| IRIS OUT | **0.305** | 0.335 | 0.577 | 341/734 |
+| 꿈의 버스 | 0.045 | 0.116 | 0.485 | 418/477 |
+| 너에게100퍼센트 | 0.082 | 0.203 | 0.474 | 452/649 |
+| 달리 표현할 수 없어요 | 0.034 | 0.148 | 0.491 | 622/607 |
+| 등불을 지키다 | 0.047 | 0.055 | 0.497 | 369/653 |
+| 비비드라라러브 | 0.029 | 0.070 | 0.320 | 371/455 |
+| 여름이었다 | 0.076 | 0.162 | 0.469 | 449/625 |
+| **평균** | **0.081** | **0.145** | **0.470** | - |
+
+**v22 → v25 비교**:
+| 지표 | v22 | v25 | 변화 |
+|------|-----|-----|------|
+| mel_strict | 0.074 | **0.081** | +9.5% |
+| mel_lenient | 0.138 | **0.145** | +5.1% |
+| onset_f1 | 0.452 | **0.470** | +4.0% |
+
+**핵심 발견 — Vocal-to-Sheet Gap 분석**:
+- onset 매칭 후 exact pitch match: IRIS OUT 52%, 나머지 10-27%
+- chroma_similarity=0.974 (높음) vs 노트별 chroma match 14-27% (낮음)
+- 해석: 같은 key + 같은 chroma 분포이나 **다른 노트 시퀀스** → 보컬 멜로디 ≠ 피아노 편곡
+- IRIS OUT만 보컬과 피아노가 유사한 멜로디를 사용 → 높은 mel_strict
+- 이 gap은 파이프라인 개선으로 해결 불가능한 구조적 한계
+
+**RMVPE 상태**: 모델 파일 452B (네트워크 방화벽 리다이렉트 HTML). 여전히 차단됨.
+
+**다음 방향**:
+1. RMVPE 재시도 (네트워크 가능 시) — 서브하모닉 내성 기대
+2. CREPE mode 비교 (v26 변경사항 적용 시 CREPE 결과 확인, 시간 소요 ~200분)
+3. 평가 메트릭 재검토: vocal melody와 piano arrangement의 구조적 차이를 고려한 메트릭 필요
+4. 참조 데이터 다양화: vocal transcription 참조가 있으면 더 정확한 평가 가능
+
+### v26 Postprocess Simplification (2026-03-05) — merge 제거 + min_dur 조정
+
+**이유**: v25 progressive ablation으로 각 postprocess 단계의 기여도를 정밀 측정한 결과:
+- outlier removal: 가장 중요 (IRIS OUT 0.077→0.216, +181%)
+- beat snap: 두 번째 (0.060→0.078, +30%)
+- **merge_same_pitch: 오히려 평균 악화** (0.048→0.043, -10%)
+- diatonic gate: 소폭 개선 (+2.7%)
+- self_octave: 소폭 개선 (+4.1%)
+
+**변경 사항**:
+
+1. `core/postprocess.py` — `_merge_same_pitch()` 호출 제거
+   - 전체 파이프라인에서 제거: avg 0.081→0.085 (+5.0%)
+   - max_gap 단조 감소 패턴: g150ms(0.081) → g100ms(0.083) → g50ms(0.083) → g30ms(0.084) → none(0.085)
+   - 세그먼터의 min_note_duration이 이미 아티팩트 필터 역할
+   - 6/8곡 개선, 퇴보 없음
+
+2. `core/note_segmenter.py` — min_note_duration 60ms → 50ms
+   - 40ms(0.089), 50ms(0.090), 60ms(0.085), 80ms(0.081), 100ms(0.049)
+   - 50ms가 최적: 비비드라라러브 0.029→0.073 (+152%)
+
+**폐기한 시도**:
+- FCPE decoder_mode "argmax": mel_strict 0.305→0.278 (IRIS OUT 악화)
+- FCPE threshold 0.003/0.001: voiced% 증가하나 mel_strict 동일 또는 하락
+- pyin F0 추출: isolated vocals에서 voiced rate 2.5% (사용 불가)
+- subdivision threshold 130: IRIS OUT -12.8%, 달리 -23.7% (악화)
+- min_note_duration 30ms: 0.090으로 50ms(0.090)와 동일
+
+**v26 최종 결과 (FCPE mode)**:
+
+| 곡 | mel_strict | mel_lenient | onset_f1 | notes |
+|----|-----------|-------------|----------|-------|
+| Golden | 0.028 | 0.075 | 0.478 | 558/588 |
+| IRIS OUT | **0.315** | 0.346 | 0.617 | 404/734 |
+| 꿈의 버스 | 0.054 | 0.128 | 0.563 | 525/477 |
+| 너에게100퍼센트 | 0.089 | 0.212 | 0.509 | 538/649 |
+| 달리 표현할 수 없어요 | 0.037 | 0.155 | 0.526 | 746/607 |
+| 등불을 지키다 | 0.050 | 0.060 | 0.577 | 456/653 |
+| 비비드라라러브 | 0.073 | 0.152 | 0.418 | 479/455 |
+| 여름이었다 | 0.075 | 0.162 | 0.506 | 526/625 |
+| **평균** | **0.090** | **0.161** | **0.524** | - |
+
+**v25 → v26 비교**:
+| 지표 | v25 | v26 | 변화 |
+|------|-----|-----|------|
+| mel_strict | 0.081 | **0.090** | +11.1% |
+| mel_lenient | 0.145 | **0.161** | +11.0% |
+| onset_f1 | 0.470 | **0.524** | +11.5% |
+
+**곡별 주요 변화 (v25→v26)**:
+- 비비드라라러브: 0.029→0.073 (+152%)
+- 꿈의 버스: 0.045→0.054 (+20%)
+- IRIS OUT: 0.305→0.315 (+3.3%)
+- 너에게100퍼센트: 0.082→0.089 (+8.5%)
+- 퇴보 없음 (모든 곡 개선 또는 유지)
+
+**현재 포스트프로세싱 체인**:
+```
+outlier(t=14) → global_octave → self_octave(t=7) → clip → diatonic(0.15s) → beat_snap → dedup(30ms)
+```
+(merge_same_pitch 제거됨)
+
+**다음 방향**:
+1. RMVPE 재시도 — 회사 방화벽(ePrism)이 HuggingFace 차단 중. 네트워크 환경 변경 필요
+2. ~~세그먼터 gap bridging 파라미터 조정~~ → v27에서 완료
+3. Diatonic gate 개선 — minor scale template, adaptive threshold
+4. 곡별 최적화 가능성 탐색 — BPM, key에 따른 adaptive parameter
+
+### v27 Gap Bridging Simplification (2026-03-05) — max_gap_frames 10→5, pitch tolerance 제거
+
+**이유**: v26 이후 gap bridging 파라미터 스윕 실험:
+- g10_p2_d3 (기존): avg mel_strict 0.0901
+- g5_p2_d3: **0.0906** (+0.6%)
+- g5_p0_d0: 0.0906 (pitch tolerance 없어도 동일)
+- g15_p2_d3: 0.0903
+
+**핵심 발견**:
+- pitch tolerance(±0 vs ±1 vs ±2 semitone)는 효과 **거의 없음** — 코드 단순화 근거
+- max_gap_frames=5(50ms)가 10(100ms)보다 소폭 우수
+
+**변경 사항**:
+1. `core/note_segmenter.py` — `max_gap_frames` 10 → 5
+2. `core/note_segmenter.py` — pitch tolerance bridging 분기 제거 (±2st 유사 pitch 단문 gap bridging)
+   - 기존: 같은 pitch 최대 max_gap_frames까지 브리징 + 유사 pitch ≤3프레임 split bridge
+   - 변경: 같은 pitch만 max_gap_frames까지 브리징 (코드 단순화)
+
+**v27 평가 결과**: 실행 중 (2026-03-05 기준, 완료 후 업데이트 예정)
+
+**예상 결과**: mel_strict avg ≈ 0.091 (+0.6%)
+
 (이전 v9~v21 이력은 git history 참조)

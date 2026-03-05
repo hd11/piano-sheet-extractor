@@ -1,0 +1,141 @@
+{
+  "summary": {
+    "avg_melody_f1_strict": 0.0891,
+    "avg_melody_f1_lenient": 0.1678,
+    "avg_pitch_class_f1": 0.2024,
+    "avg_onset_f1": 0.5364,
+    "avg_chroma_similarity": 0.9756,
+    "avg_contour_similarity": 0.7609,
+    "total_songs": 8
+  },
+  "songs": {
+    "Golden": {
+      "melody_f1_strict": 0.02714164546225615,
+      "melody_f1_lenient": 0.0729431721798134,
+      "pitch_class_f1": 0.12383375742154368,
+      "pitch_class_precision": 0.12351945854483926,
+      "pitch_class_recall": 0.12414965986394558,
+      "onset_f1": 0.4732824427480916,
+      "chroma_similarity": 0.9813641896259743,
+      "contour_similarity": 0.7385740402193784,
+      "note_count_ratio": 1.005,
+      "note_counts": {
+        "ref": 588,
+        "gen": 591
+      },
+      "processing_time": 3.1
+    },
+    "IRIS OUT": {
+      "melody_f1_strict": 0.30976430976430974,
+      "melody_f1_lenient": 0.34511784511784516,
+      "pitch_class_f1": 0.398989898989899,
+      "pitch_class_precision": 0.5220264317180616,
+      "pitch_class_recall": 0.3228882833787466,
+      "onset_f1": 0.6464646464646464,
+      "chroma_similarity": 0.9384507949726465,
+      "contour_similarity": 0.7579203899268887,
+      "note_count_ratio": 0.619,
+      "note_counts": {
+        "ref": 734,
+        "gen": 454
+      },
+      "processing_time": 1.9
+    },
+    "꿈의 버스": {
+      "melody_f1_strict": 0.04849660523763337,
+      "melody_f1_lenient": 0.12415130940834142,
+      "pitch_class_f1": 0.16488845780795344,
+      "pitch_class_precision": 0.15342960288808663,
+      "pitch_class_recall": 0.17819706498951782,
+      "onset_f1": 0.5645004849660523,
+      "chroma_similarity": 0.9899512803697139,
+      "contour_similarity": 0.760342368045649,
+      "note_count_ratio": 1.161,
+      "note_counts": {
+        "ref": 477,
+        "gen": 554
+      },
+      "processing_time": 1.9
+    },
+    "너에게100퍼센트": {
+      "melody_f1_strict": 0.08964955175224122,
+      "melody_f1_lenient": 0.215158924205379,
+      "pitch_class_f1": 0.22656886715566424,
+      "pitch_class_precision": 0.24048442906574394,
+      "pitch_class_recall": 0.21417565485362094,
+      "onset_f1": 0.5134474327628362,
+      "chroma_similarity": 0.9909670017202843,
+      "contour_similarity": 0.7386363636363636,
+      "note_count_ratio": 0.891,
+      "note_counts": {
+        "ref": 649,
+        "gen": 578
+      },
+      "processing_time": 2.1
+    },
+    "달리 표현할 수 없어요": {
+      "melody_f1_strict": 0.03625815808556925,
+      "melody_f1_lenient": 0.15228426395939088,
+      "pitch_class_f1": 0.16533720087019582,
+      "pitch_class_precision": 0.14766839378238342,
+      "pitch_class_recall": 0.18780889621087316,
+      "onset_f1": 0.5308194343727339,
+      "chroma_similarity": 0.991349739392073,
+      "contour_similarity": 0.7297178130511464,
+      "note_count_ratio": 1.272,
+      "note_counts": {
+        "ref": 607,
+        "gen": 772
+      },
+      "processing_time": 2.5
+    },
+    "등불을 지키다": {
+      "melody_f1_strict": 0.053475935828877004,
+      "melody_f1_lenient": 0.11408199643493762,
+      "pitch_class_f1": 0.1319073083778966,
+      "pitch_class_precision": 0.15778251599147122,
+      "pitch_class_recall": 0.11332312404287902,
+      "onset_f1": 0.625668449197861,
+      "chroma_similarity": 0.9687175661895402,
+      "contour_similarity": 0.8124459809853068,
+      "note_count_ratio": 0.718,
+      "note_counts": {
+        "ref": 653,
+        "gen": 469
+      },
+      "processing_time": 2.1
+    },
+    "비비드라라러브": {
+      "melody_f1_strict": 0.07083333333333333,
+      "melody_f1_lenient": 0.15625,
+      "pitch_class_f1": 0.20625,
+      "pitch_class_precision": 0.19603960396039605,
+      "pitch_class_recall": 0.2175824175824176,
+      "onset_f1": 0.4166666666666667,
+      "chroma_similarity": 0.9540856630062651,
+      "contour_similarity": 0.8144214645053103,
+      "note_count_ratio": 1.11,
+      "note_counts": {
+        "ref": 455,
+        "gen": 505
+      },
+      "processing_time": 2.5
+    },
+    "여름이었다": {
+      "melody_f1_strict": 0.07679180887372014,
+      "melody_f1_lenient": 0.1621160409556314,
+      "pitch_class_f1": 0.20136518771331058,
+      "pitch_class_precision": 0.21572212065813529,
+      "pitch_class_recall": 0.1888,
+      "onset_f1": 0.5204778156996587,
+      "chroma_similarity": 0.9895955722925769,
+      "contour_similarity": 0.734915924826904,
+      "note_count_ratio": 0.875,
+      "note_counts": {
+        "ref": 625,
+        "gen": 547
+      },
+      "processing_time": 2.1
+    }
+  }
+}

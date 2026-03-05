@@ -25,6 +25,7 @@ def postprocess_notes(
     audio: Optional[np.ndarray] = None,
     sr: Optional[int] = None,
     bpm: Optional[float] = None,
+    beat_times: Optional[np.ndarray] = None,
 ) -> List[Note]:
     """Apply self-contained postprocessing to extracted notes.
 
@@ -50,17 +51,26 @@ def postprocess_notes(
     original_count = len(notes)
 
     notes = _remove_outliers(notes)
-    notes = _merge_same_pitch(notes, audio=audio, sr=sr)
+    # NOTE: _merge_same_pitch removed in v26 — ablation showed it hurts
+    # mel_strict by 5% (0.0846→0.0806). The segmenter's min_note_duration
+    # (60ms) already filters frame-level artifacts, and beat snap + dedup
+    # handle onset collisions. Keeping separate same-pitch notes preserves
+    # re-attacks and matches more reference notes.
     notes = _global_octave_adjust(notes)
     notes = _self_octave_correction(notes)
     notes = _clip_vocal_range(notes)
     notes = _diatonic_gate(notes)
 
     # Beat-aligned onset snapping (self-contained, uses audio only)
-    # Adaptive subdivisions based on BPM
-    if audio is not None and sr is not None:
-        subdivisions = 4 if (bpm is not None and bpm >= 140) else 2
-        notes = _snap_to_beats(notes, audio, sr, subdivisions=subdivisions)
+    # Adaptive subdivisions: 16th notes for fast songs, 8th for slow
+    snap_subdiv = 4 if (bpm is not None and bpm >= 140) else 2
+    if beat_times is not None and len(beat_times) >= 2:
+        notes = _snap_to_beats_from_grid(notes, beat_times, subdivisions=snap_subdiv)
+    elif audio is not None and sr is not None:
+        notes = _snap_to_beats(notes, audio, sr, subdivisions=snap_subdiv)
+
+    # Remove near-simultaneous notes created by beat snap collisions
+    notes = _dedup_close_onsets(notes)
 
     logger.info(
         "Postprocessing: %d -> %d notes",
@@ -74,7 +84,7 @@ def postprocess_notes(
 def _remove_outliers(
     notes: List[Note],
     window: int = 15,
-    threshold: int = 9,
+    threshold: int = 14,
 ) -> List[Note]:
     """Remove notes that are far from their local pitch median.
 
@@ -703,6 +713,110 @@ def _diatonic_gate(
         logger.info("Diatonic gate: %d/%d short chromatic notes removed", removed, len(notes))
 
     return filtered
+
+
+def _dedup_close_onsets(
+    notes: List[Note],
+    min_gap: float = 0.030,
+) -> List[Note]:
+    """Remove near-simultaneous notes created by beat snap collisions.
+
+    When beat snapping moves two notes to the same or very close grid point,
+    this function keeps only the note with the longer duration (more likely
+    to be a real note rather than a transition artifact).
+
+    Self-contained: uses only note list, no reference data.
+
+    Args:
+        notes: Input notes (after beat snap).
+        min_gap: Minimum onset gap in seconds. Notes closer than this
+            are considered collisions.
+
+    Returns:
+        Notes with collisions resolved.
+    """
+    if len(notes) < 2:
+        return notes
+
+    sorted_notes = sorted(notes, key=lambda n: n.onset)
+    result = [sorted_notes[0]]
+
+    for i in range(1, len(sorted_notes)):
+        curr = sorted_notes[i]
+        prev = result[-1]
+        if curr.onset - prev.onset < min_gap:
+            # Collision: keep the note with longer duration
+            if curr.duration > prev.duration:
+                result[-1] = curr
+            # else keep prev (already in result)
+        else:
+            result.append(curr)
+
+    removed = len(notes) - len(result)
+    if removed > 0:
+        logger.info(
+            "Close onset dedup: %d/%d notes removed (min_gap=%.0fms)",
+            removed, len(notes), min_gap * 1000,
+        )
+
+    return result
+
+
+def _snap_to_beats_from_grid(
+    notes: List[Note],
+    beat_times: np.ndarray,
+    subdivisions: int = 2,
+) -> List[Note]:
+    """Snap note onsets to nearest beat subdivision using pre-computed beats.
+
+    Same algorithm as _snap_to_beats but uses externally provided beat
+    positions (e.g., from original mix with drums/bass for better tracking).
+
+    Self-contained: uses only beat positions, no reference data.
+    """
+    if len(notes) == 0 or len(beat_times) < 2:
+        return notes
+
+    # Build subdivision grid from beat times
+    grid = []
+    for i in range(len(beat_times) - 1):
+        beat_dur = beat_times[i + 1] - beat_times[i]
+        sub_dur = beat_dur / subdivisions
+        for s in range(subdivisions):
+            grid.append(beat_times[i] + s * sub_dur)
+    grid.append(beat_times[-1])
+    grid = np.array(grid)
+
+    # Max snap distance = half a subdivision interval
+    sub_intervals = np.diff(grid)
+    max_snap = float(np.median(sub_intervals)) * 0.5
+
+    snapped_count = 0
+    snapped = []
+    for n in notes:
+        idx = np.argmin(np.abs(grid - n.onset))
+        dist = abs(grid[idx] - n.onset)
+        if dist <= max_snap:
+            new_onset = round(float(grid[idx]), 4)
+            snapped_count += 1
+        else:
+            new_onset = n.onset
+        snapped.append(Note(
+            pitch=n.pitch,
+            onset=new_onset,
+            duration=n.duration,
+            velocity=n.velocity,
+        ))
+
+    logger.info(
+        "Beat snap (from mix): %d/%d notes snapped (max_snap=%.0fms, grid=%d points)",
+        snapped_count,
+        len(notes),
+        max_snap * 1000,
+        len(grid),
+    )
+
+    return snapped
 
 
 def _snap_to_beats(

@@ -59,15 +59,19 @@ def save_musicxml(
     # Strip leading silence
     first_onset = sorted_notes[0].onset
 
-    # Adaptive quantization grid based on BPM
-    # Fast songs (>=140 BPM): 16th-note grid for rhythmic detail
-    # Slow songs (<140 BPM): 8th-note grid to avoid fragmentation
-    if bpm >= 140:
-        grid_mult = 4  # 16th notes (0.25 quarter notes)
-        min_dur = 0.25
-    else:
-        grid_mult = 2  # 8th notes (0.5 quarter notes)
-        min_dur = 0.5
+    # Adaptive quantization grid: ensure max onset error < 50ms
+    # max_error = 60 / bpm / grid_mult / 2 < 0.05
+    # → grid_mult > 600 / bpm, round up to power of 2
+    import math
+    min_grid_mult = math.ceil(600.0 / bpm)
+    grid_mult = max(min_grid_mult, 4)  # at least 16th notes
+    grid_mult = 2 ** math.ceil(math.log2(grid_mult))  # round to power of 2
+    min_dur = 1.0 / grid_mult
+    max_err_ms = 60.0 / bpm / grid_mult / 2 * 1000
+    logger.info(
+        "Quantization grid: 1/%d notes (grid_mult=%d, max_err=%.0fms)",
+        grid_mult * 4, grid_mult, max_err_ms,
+    )
 
     # Convert to quantized (onset_q, dur_q, pitch, velocity) tuples
     quantized = []
