@@ -546,4 +546,37 @@ music-melody-expert 분석 결과:
 - 대안 F0 추출기 단독 사용도 부족 (v8 FCPE, v10 SOME)
 - 남은 유망 경로: RMVPE (subharmonic 전용 설계), CREPE+FCPE 앙상블
 
+### v13 FCPE F0 추출기 통합 (2026-03-05) — torchfcpe 파이프라인
+
+**배경**: RMVPE 모델 다운로드 네트워크 차단 → pip 설치 가능한 torchfcpe (40MB 번들)로 전환
+
+**변경**:
+- `core/pitch_extractor_fcpe.py` 신규 — FCPE F0 추출 wrapper (singleton 모델, median filter)
+- `core/pipeline.py` — `mode="fcpe"` 추가 (crepe/fcpe/bp 3종)
+- `scripts/evaluate.py` — `--mode` CLI 인자 추가
+
+**8곡 전체 결과** (v13b, median filter 적용):
+| 메트릭 | FCPE | CREPE baseline | 차이 |
+|--------|------|----------------|------|
+| mel_strict avg | 0.060 | 0.067 | -10% |
+| pc_f1 avg | 0.171 | ~0.735 | -77% |
+| chroma avg | 0.970 | ~0.98 | -1% |
+| onset_f1 avg | 0.461 | ~0.50 | -8% |
+| 시간/곡 | **2초** | **25분** | **750x** |
+
+**곡별 특이점**:
+- IRIS OUT: mel_strict=0.189 (CREPE ~0.03) — FCPE가 서브하모닉 문제 없이 6배 우수
+- 등불을 지키다: mel_strict=0.059 (CREPE ~0.095) — FCPE 약간 낮음
+
+**분석**:
+- chroma=0.970 (피치 클래스 정확) vs pc_f1=0.171 (노트 매칭 실패) → **note segmentation이 병목**
+- FCPE의 85.9% voiced rate이 CREPE보다 높아 비보컬 구간도 노트화
+- mel_strict는 CREPE와 거의 동등 (0.060 vs 0.067)
+- 속도 750배 향상 → 빠른 실험 반복에 매우 유용
+- **pipeline 기본값은 CREPE 유지**, FCPE는 `--mode fcpe`로 사용 가능
+
+**다음 방향**:
+- note_segmenter 개선이 CREPE/FCPE 공통 병목
+- RMVPE는 네트워크 차단으로 보류 (모델 181MB 수동 다운로드 필요)
+
 (이전 v9~v21 이력은 git history 참조)

@@ -26,7 +26,7 @@ from core.pipeline import extract_melody
 from core.reference_extractor import extract_reference_melody
 
 
-def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path):
+def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path, mode: str = "crepe"):
     """Evaluate pipeline on all songs in input directory."""
 
     mp3_files = sorted(glob.glob(str(input_dir / "*.mp3")))
@@ -59,6 +59,7 @@ def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path):
                 mp3_path,
                 cache_dir=cache_dir,
                 output_path=musicxml_output,
+                mode=mode,
             )
 
             # Step 2: Load back (round-trip identity)
@@ -180,6 +181,13 @@ def main():
         action="store_true",
         help="Enable verbose logging",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="crepe",
+        choices=["crepe", "fcpe", "bp"],
+        help="F0 extraction mode (default: crepe)",
+    )
 
     args = parser.parse_args()
 
@@ -189,7 +197,7 @@ def main():
     )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    evaluate_all_songs(args.input_dir, args.output, args.output_dir)
+    evaluate_all_songs(args.input_dir, args.output, args.output_dir, mode=args.mode)
 
 
 if __name__ == "__main__":

@@ -1,93 +1,99 @@
 """FCPE-based F0 pitch extraction.
 
-Uses torchfcpe (Conformer-based) for vocal pitch tracking.
+Uses torchfcpe (Conformer-based) for robust vocal pitch tracking.
 FCPE is context-aware unlike CREPE's single-frame CNN,
 making it inherently more resistant to subharmonic locking.
+
+pip install torchfcpe  (bundled 40MB model, no extra download needed)
 """
 
 import logging
 
-import librosa
 import numpy as np
 import torch
+from scipy.ndimage import median_filter
 
 from .types import F0Contour
 
 logger = logging.getLogger(__name__)
 
+# Lazy singleton to avoid reloading model on every call
+_model = None
+_model_device = None
 
-def extract_f0_fcpe(
+
+def _get_model(device: str):
+    """Get or create the FCPE inference model (singleton)."""
+    global _model, _model_device
+    if _model is None or _model_device != device:
+        from torchfcpe import spawn_bundled_infer_model
+
+        _model = spawn_bundled_infer_model(device=device)
+        _model_device = device
+        logger.info("FCPE model loaded on %s", device)
+    return _model
+
+
+def extract_f0(
     audio: np.ndarray,
     sr: int,
     step_size_ms: int = 10,
-    confidence_threshold: float = 0.006,
+    threshold: float = 0.006,
 ) -> F0Contour:
     """Extract fundamental frequency contour using FCPE.
 
     Args:
         audio: 1-D mono audio array (float32).
         sr: Sample rate of audio.
-        step_size_ms: Hop size in milliseconds (default 10ms = 100 fps).
-        confidence_threshold: Frames below this threshold are zeroed.
+        step_size_ms: Ignored (FCPE fixed at 10ms), kept for API compat.
+        threshold: Voiced/unvoiced threshold (default 0.006).
 
     Returns:
         F0Contour with times, frequencies (Hz), and confidence arrays.
     """
-    import torchfcpe
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # FCPE requires 16kHz input
-    target_sr = 16000
-    if sr != target_sr:
-        audio_16k = librosa.resample(audio, orig_sr=sr, target_sr=target_sr)
-    else:
-        audio_16k = audio
-
     logger.info(
-        "Running FCPE: sr=%d->%d, hop=%dms, device=%s, %.1fs audio",
-        sr,
-        target_sr,
-        step_size_ms,
-        device,
-        len(audio) / sr,
+        "Running FCPE: sr=%d, device=%s, %.1fs audio",
+        sr, device, len(audio) / sr,
     )
 
-    model = torchfcpe.spawn_bundled_infer_model(device)
+    model = _get_model(device)
 
-    audio_tensor = torch.from_numpy(audio_16k).unsqueeze(0).unsqueeze(-1).float().to(device)
+    # FCPE accepts any SR; resamples internally to 16kHz
+    # Input shape: (batch, n_samples) per official unit test
+    wav_tensor = torch.from_numpy(audio).float().unsqueeze(0)
 
-    # Run FCPE inference
-    f0_tensor = model.infer(
-        audio_tensor,
-        sr=target_sr,
-        decoder_mode="local_argmax",
-        threshold=confidence_threshold,
-        f0_min=50.0,
-        f0_max=1100.0,
-        interp_uv=False,
-    )
+    with torch.no_grad():
+        f0_tensor = model.infer(
+            wav_tensor,
+            sr=sr,
+            decoder_mode="local_argmax",
+            threshold=threshold,
+            interp_uv=False,  # 0.0 for unvoiced frames
+        )
 
+    # f0_tensor shape: (1, n_frames, 1) -> (n_frames,)
     pitch = f0_tensor.squeeze().cpu().numpy()
 
-    # Generate confidence: FCPE doesn't return confidence directly,
-    # use voiced/unvoiced as binary confidence (1.0 if voiced, 0.0 if not)
-    confidence = (pitch > 0).astype(np.float32)
+    # Median filter for pitch stabilization (same as CREPE pipeline)
+    # Only filter voiced frames to avoid spreading zeros
+    voiced_mask = pitch > 0
+    if np.sum(voiced_mask) > 3:
+        pitch_filtered = median_filter(pitch, size=3)
+        # Preserve unvoiced regions
+        pitch = np.where(voiced_mask, pitch_filtered, 0.0)
 
-    logger.info(
-        "FCPE raw: %d frames, voiced=%.1f%%",
-        len(pitch),
-        100.0 * np.mean(pitch > 0),
-    )
+    # FCPE hop = 160 samples at 16kHz = 10ms
+    times = np.arange(len(pitch)) * 10.0 / 1000.0
 
-    # Generate time array matching FCPE's hop size (10ms at 16kHz)
-    times = np.arange(len(pitch)) * step_size_ms / 1000.0
+    # Binary confidence from voiced/unvoiced
+    confidence = np.where(pitch > 0, 1.0, 0.0).astype(np.float32)
 
     voiced_count = int(np.sum(pitch > 0))
     logger.info(
-        "F0 extracted: %d frames, %d voiced (%.1f%%)",
-        len(pitch),
-        voiced_count,
+        "FCPE extracted: %d frames, %d voiced (%.1f%%)",
+        len(pitch), voiced_count,
         100.0 * voiced_count / max(len(pitch), 1),
     )
 

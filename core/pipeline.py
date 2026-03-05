@@ -3,13 +3,10 @@
 Single entry point: extract_melody(mp3_path) -> List[Note]
 No reference data enters this module. MP3 is the only input.
 
-Pipeline (BP mode - default):
-  MP3 -> vocal_separator (Demucs) -> Basic Pitch + CQT octave correction
-      -> postprocess -> musicxml_writer -> output.musicxml
-
-Pipeline (CREPE mode - fallback):
-  MP3 -> vocal_separator (Demucs) -> pitch_extractor (CREPE)
-      -> note_segmenter -> postprocess -> musicxml_writer -> output.musicxml
+Pipeline modes:
+  crepe: MP3 -> Demucs -> CREPE F0 -> note_segmenter -> postprocess -> MusicXML
+  fcpe:  MP3 -> Demucs -> FCPE F0  -> note_segmenter -> postprocess -> MusicXML
+  bp:    MP3 -> Demucs -> Basic Pitch + CQT octave correction -> postprocess -> MusicXML
 """
 
 import logging
@@ -22,7 +19,8 @@ import numpy as np
 from .musicxml_writer import save_musicxml
 from .note_extractor_bp import extract_notes_bp
 from .note_segmenter import segment_notes
-from .pitch_extractor import extract_f0
+from .pitch_extractor import extract_f0 as extract_f0_crepe
+from .pitch_extractor_fcpe import extract_f0 as extract_f0_fcpe
 from .postprocess import postprocess_notes
 from .types import Note
 from .vocal_separator import separate_vocals
@@ -42,7 +40,7 @@ def extract_melody(
         mp3_path: Path to input MP3 file.
         cache_dir: Directory for caching vocals. Defaults to mp3_path.parent/cache.
         output_path: If provided, saves MusicXML to this path.
-        mode: "bp" for Basic Pitch + CQT (default), "crepe" for CREPE F0.
+        mode: "crepe" (default), "fcpe" for FCPE, "bp" for Basic Pitch + CQT.
 
     Returns:
         List of Note objects representing the extracted melody.
@@ -61,18 +59,23 @@ def extract_melody(
     vocals_22k = librosa.resample(vocals, orig_sr=sr, target_sr=22050)
     bpm = _estimate_bpm_from_audio(vocals_22k, 22050)
 
-    # Step 3: Note extraction (BP or CREPE)
+    # Step 3: Note extraction
     if mode == "bp":
         logger.info("Step 3: Note extraction (Basic Pitch + CQT)")
         notes = extract_notes_bp(vocals, sr)
+    elif mode == "fcpe":
+        logger.info("Step 3: Pitch extraction (FCPE)")
+        contour = extract_f0_fcpe(vocals, sr)
+        logger.info("Step 4: Note segmentation")
+        notes = segment_notes(contour)
     else:
         logger.info("Step 3: Pitch extraction (CREPE)")
-        contour = extract_f0(vocals, sr)
+        contour = extract_f0_crepe(vocals, sr)
         logger.info("Step 4: Note segmentation")
         notes = segment_notes(contour)
 
-    # Step 4/5: Postprocessing (self-contained, no reference)
-    logger.info("Step %d: Postprocessing", 4 if mode == "bp" else 5)
+    # Postprocessing (self-contained, no reference)
+    logger.info("Postprocessing")
     notes = postprocess_notes(notes, audio=vocals_22k, sr=22050, bpm=bpm)
 
     logger.info("Pipeline complete: %d notes extracted", len(notes))
