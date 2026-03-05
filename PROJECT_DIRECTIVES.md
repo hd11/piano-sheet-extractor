@@ -577,6 +577,32 @@ music-melody-expert 분석 결과:
 
 **다음 방향**:
 - note_segmenter 개선이 CREPE/FCPE 공통 병목
-- RMVPE는 네트워크 차단으로 보류 (모델 181MB 수동 다운로드 필요)
+- RMVPE는 네트워크 차단으로 보류 (아래 별도 기록 참조)
+
+### RMVPE 보류 (2026-03-05) — 네트워크 환경 변경 시 재시도
+
+**상태**: 코드 준비 완료, 모델 다운로드만 차단됨
+
+**준비된 파일**:
+- `core/rmvpe_model.py` — RVC에서 가져온 RMVPE 모델 코드 (670줄, imports 패치 완료)
+- `from infer.lib import jit` 제거
+- `from infer.modules.ipex import ipex_init` 제거
+
+**필요한 작업** (네트워크 환경 변경 시):
+1. 모델 다운로드: `curl -L -o models/rmvpe.pt "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/rmvpe.pt"` (181MB)
+2. `core/pitch_extractor_rmvpe.py` wrapper 생성 (FCPE wrapper 참고)
+3. `core/pipeline.py`에 `mode="rmvpe"` 추가
+4. torch.load 시 `weights_only=False` 필요 (PyTorch 2.6+)
+
+**RMVPE API**:
+```python
+from core.rmvpe_model import RMVPE
+rmvpe = RMVPE("models/rmvpe.pt", is_half=False, device="cpu", use_jit=False)
+f0_hz = rmvpe.infer_from_audio(audio_16k, thred=0.03)
+# input: 16kHz mono np.ndarray
+# output: np.ndarray float32, shape (n_frames,), 100fps (hop=160@16kHz), 0.0=unvoiced
+```
+
+**기대 효과**: CREPE보다 서브하모닉 내성 강함, FCPE와 유사한 속도
 
 (이전 v9~v21 이력은 git history 참조)
