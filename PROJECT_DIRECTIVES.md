@@ -629,24 +629,23 @@ v14 이후 이번 세션에서 진행한 모든 실험을 하나로 묶음.
 
 #### 탐색 실험 전체 목록
 
-| 실험 | 내용 | mel_strict | 결과 |
-|------|------|-----------|------|
-| v15 | quantized seg + old grid | 0.057 | 폐기 |
-| v16 | quantized seg + fine grid | 0.056 | 폐기 |
-| v17 | free seg + fine grid | 0.065 | 개선 |
-| v17b | no postprocess | 0.011 | 폐기 (postprocess 필수 확인) |
-| v18 | beat snap 제거 | 0.054 | 폐기 (beat snap 필요) |
-| v19 | v17 재확인 | 0.065 | 확인 |
-| v20 | CQT octave verify | 0.015 | 폐기 (치명적 악화) |
-| v21 | harmonic correction | 0.054 | 폐기 (FCPE에 불필요) |
-| **v22** | **free seg + fine grid + mix beats** | **0.074** | **채택** |
-| v23 | subdivisions=4 전체 적용 | 0.066 | 폐기 (slow songs 악화) |
-| v24 | dedup + BPM 3:2 초기 적용 | 0.075 | 채택 |
-| v25 | outlier threshold 9→14 | 0.081 | 채택 |
-| v26a | merge_same_pitch 제거 | 0.085 | 채택 |
-| v26b | min_note_duration 60ms→50ms | 0.090 | 채택 |
-| v26c | FCPE argmax / pyin / threshold 실험 | - | 폐기 |
-| v27 | max_gap_frames 10→5, pitch bridge 제거 | ~0.091 | 채택 (평가 중) |
+| 내용 | mel_strict | 결과 |
+|------|-----------|------|
+| quantized seg + old grid | 0.057 | 폐기 |
+| quantized seg + fine grid | 0.056 | 폐기 |
+| free seg + fine grid | 0.065 | 개선 |
+| no postprocess | 0.011 | 폐기 (postprocess 필수 확인) |
+| beat snap 제거 | 0.054 | 폐기 (beat snap 필요) |
+| CQT octave verify | 0.015 | 폐기 (치명적 악화) |
+| harmonic correction | 0.054 | 폐기 (FCPE에 불필요) |
+| **free seg + fine grid + mix beats** | **0.074** | **채택** |
+| subdivisions=4 전체 적용 | 0.066 | 폐기 (slow songs 악화) |
+| dedup + BPM 3:2 초기 적용 | 0.075 | 채택 |
+| outlier threshold 9→14 | 0.081 | 채택 |
+| merge_same_pitch 제거 | 0.085 | 채택 |
+| min_note_duration 60ms→50ms | 0.090 | 채택 |
+| FCPE argmax / pyin / threshold 실험 | - | 폐기 |
+| max_gap_frames 10→5, pitch bridge 제거 | ~0.091 | 채택 (평가 중) |
 
 #### 최종 채택 변경 사항
 
@@ -673,7 +672,7 @@ v14 이후 이번 세션에서 진행한 모든 실험을 하나로 묶음.
 
 #### 주요 ablation 결과
 
-Outlier threshold (v25):
+Outlier threshold:
 | t | avg | IRIS OUT |
 |---|-----|---------|
 | 9 | 0.075 | 0.301 |
@@ -681,7 +680,7 @@ Outlier threshold (v25):
 | **14** | **0.081** | **0.305** |
 | 16 | 0.052 | 0.078 ← cliff |
 
-Progressive postprocess (v26):
+Progressive postprocess:
 | 단계 | avg |
 |------|-----|
 | raw_seg + oct + clip | 0.046 |
@@ -692,12 +691,12 @@ Progressive postprocess (v26):
 | merge 제거 후 full | 0.085 |
 | + min_dur 50ms | **0.090** |
 
-Gap bridging (v27):
+Gap bridging:
 - max_gap 10 (기존): 0.0901
 - max_gap 5: **0.0906** ← 채택
 - pitch tolerance ±2st: 효과 없음 → 제거
 
-#### 최종 결과 (v26b 기준, 평가 완료)
+#### 최종 결과 (평가 완료)
 
 | 곡 | mel_strict | mel_lenient | onset_f1 | notes |
 |----|-----------|-------------|----------|-------|
@@ -711,7 +710,7 @@ Gap bridging (v27):
 | 여름이었다 | 0.075 | 0.162 | 0.506 | 526/625 |
 | **평균** | **0.090** | **0.161** | **0.524** | - |
 
-v27 평가 결과: 실행 중 (완료 후 업데이트 예정, 예상 ~0.091)
+최종 실험(max_gap 5) 평가 결과: 실행 중 (완료 후 업데이트 예정, 예상 ~0.091)
 
 #### 핵심 발견
 
@@ -723,8 +722,54 @@ v27 평가 결과: 실행 중 (완료 후 업데이트 예정, 예상 ~0.091)
 - FCPE: CREPE 대비 750x 빠르고 mel_strict +10%
 
 **다음 방향**:
-1. RMVPE 재시도 — 회사 방화벽(ePrism) HuggingFace 차단 중, 네트워크 환경 변경 필요
+1. FCPE+RMVPE 앙상블 — 곡별 보완적 (아래 v16 참조)
 2. Diatonic gate 개선 — minor scale template, adaptive threshold
 3. 곡별 adaptive parameter 탐색
 
 (이전 v9~v14 이력은 git history 및 위 섹션 참조)
+
+### v16 RMVPE 통합 및 평가 (2026-03-05) — RMVPE 단독은 FCPE 미달, 앙상블 가능성
+
+**배경**: HuggingFace 네트워크 차단 해제 → RMVPE 모델(172MB) 다운로드 성공
+
+**변경 사항**:
+- `core/rmvpe_model.py` 신규 — RVC RMVPE 아키텍처 (DeepUnet + BiGRU + Linear, 741 params)
+- `core/pitch_extractor_rmvpe.py` 신규 — RMVPE F0 wrapper (singleton, 16kHz resample, median filter)
+- `core/pipeline.py` — `mode="rmvpe"` 분기 추가
+- `scripts/evaluate.py` — rmvpe 선택지 추가
+
+**FCPE vs RMVPE 8곡 비교**:
+
+| 곡 | FCPE | RMVPE | 승자 |
+|----|------|-------|------|
+| Golden | 0.033 | 0.036 | RMVPE +9% |
+| IRIS OUT | **0.317** | 0.098 | FCPE +223% |
+| 꿈의 버스 | 0.058 | **0.073** | RMVPE +26% |
+| 너에게100퍼센트 | 0.073 | **0.099** | RMVPE +36% |
+| 달리 | 0.039 | 0.026 | FCPE +50% |
+| 등불을 지키다 | 0.045 | 0.048 | RMVPE +7% |
+| 비비드라라러브 | **0.072** | 0.025 | FCPE +188% |
+| 여름이었다 | 0.081 | 0.080 | 동등 |
+| **평균** | **0.090** | **0.061** | **FCPE +48%** |
+
+**분석**:
+- RMVPE 단독 평균 mel_strict=0.061로 FCPE(0.090) 대비 -32%
+- 그러나 곡별로 보완적: RMVPE가 3곡에서 우세 (꿈의 버스, 너에게100퍼센트, Golden)
+- FCPE 약점곡(너에게100퍼센트 0.073)에서 RMVPE가 0.099로 +36%
+- RMVPE 약점: IRIS OUT(0.098 vs 0.317), 비비드라라러브(0.025 vs 0.072)에서 대폭 하락
+- 속도: RMVPE ~2-6초/곡 (FCPE와 유사, CREPE 대비 수백배 빠름)
+
+**결론**: RMVPE 단독 사용은 부적합. FCPE 기본값 유지.
+
+**F0 앙상블 시도 (FCPE+RMVPE)**:
+- 전략: 프레임별 — 둘 다 voiced&agree(100cents 이내)→average, disagree→FCPE 선택, 하나만 voiced→그것 사용
+- 결과: mel_strict 평균 **0.062** (FCPE 단독 0.090 대비 -31%)
+- 원인: RMVPE 잘못된 피치가 averaging을 통해 FCPE 정확 피치 오염 (IRIS OUT 0.317→0.095 치명적)
+- 소폭 개선 3곡: Golden(0.033→0.040), 등불을 지키다(0.045→0.051), 여름이었다(0.081→0.082)
+- **F0-level 앙상블은 실패. 폐기.**
+
+**최종 결론**: FCPE 단독(mel_strict 0.090)이 현재 최고. RMVPE, 앙상블 모두 하락.
+**다음 방향**:
+1. Diatonic gate 개선 — minor scale template, adaptive threshold
+2. 곡별 adaptive parameter 탐색
+3. Note-level 후처리 개선 (segmenter, postprocess 체인)

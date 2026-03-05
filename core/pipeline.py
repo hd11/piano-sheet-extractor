@@ -4,9 +4,10 @@ Single entry point: extract_melody(mp3_path) -> List[Note]
 No reference data enters this module. MP3 is the only input.
 
 Pipeline modes:
-  crepe: MP3 -> Demucs -> CREPE F0 -> note_segmenter -> postprocess -> MusicXML
-  fcpe:  MP3 -> Demucs -> FCPE F0  -> note_segmenter -> postprocess -> MusicXML
-  bp:    MP3 -> Demucs -> Basic Pitch + CQT octave correction -> postprocess -> MusicXML
+  crepe:  MP3 -> Demucs -> CREPE F0  -> note_segmenter -> postprocess -> MusicXML
+  fcpe:   MP3 -> Demucs -> FCPE F0   -> note_segmenter -> postprocess -> MusicXML
+  rmvpe:  MP3 -> Demucs -> RMVPE F0  -> note_segmenter -> postprocess -> MusicXML
+  bp:     MP3 -> Demucs -> Basic Pitch + CQT octave correction -> postprocess -> MusicXML
 """
 
 import logging
@@ -20,7 +21,9 @@ from .musicxml_writer import save_musicxml
 from .note_extractor_bp import extract_notes_bp
 from .note_segmenter import segment_notes, segment_notes_quantized
 from .pitch_extractor import extract_f0 as extract_f0_crepe
+from .pitch_extractor_ensemble import extract_f0_ensemble
 from .pitch_extractor_fcpe import extract_f0 as extract_f0_fcpe
+from .pitch_extractor_rmvpe import extract_f0 as extract_f0_rmvpe
 from .postprocess import postprocess_notes
 from .types import Note
 from .vocal_separator import separate_vocals
@@ -73,6 +76,16 @@ def extract_melody(
     elif mode == "fcpe":
         logger.info("Step 3: Pitch extraction (FCPE)")
         contour = extract_f0_fcpe(vocals, sr)
+        logger.info("Step 4: Note segmentation")
+        notes = segment_notes(contour)
+    elif mode == "rmvpe":
+        logger.info("Step 3: Pitch extraction (RMVPE)")
+        contour = extract_f0_rmvpe(vocals, sr)
+        logger.info("Step 4: Note segmentation")
+        notes = segment_notes(contour)
+    elif mode == "ensemble":
+        logger.info("Step 3: Pitch extraction (FCPE+RMVPE ensemble)")
+        contour = extract_f0_ensemble(vocals, sr)
         logger.info("Step 4: Note segmentation")
         notes = segment_notes(contour)
     else:
