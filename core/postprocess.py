@@ -57,7 +57,7 @@ def postprocess_notes(
     notes = _diatonic_gate(notes)
 
     # Beat-aligned onset snapping (self-contained, uses audio only)
-    # Adaptive subdivisions: fast songs (>=140 BPM) use 16th notes, slow songs use 8th notes
+    # Adaptive subdivisions based on BPM
     if audio is not None and sr is not None:
         subdivisions = 4 if (bpm is not None and bpm >= 140) else 2
         notes = _snap_to_beats(notes, audio, sr, subdivisions=subdivisions)
@@ -107,6 +107,74 @@ def _remove_outliers(
         logger.info("Outlier removal: %d/%d notes removed", removed, len(notes))
 
     return keep if keep else notes
+
+
+def _consolidate_short_notes(
+    notes: List[Note],
+    min_dur: float = 0.12,
+) -> List[Note]:
+    """Merge very short same-pitch notes into adjacent neighbors.
+
+    F0 extractors produce pitch jitter that causes the note segmenter
+    to fragment single notes into many tiny pieces. This pass absorbs
+    notes shorter than min_dur into same-pitch temporal neighbors.
+    Different-pitch short notes are kept as-is to preserve pitch content.
+
+    Self-contained: uses only note list, no reference data.
+    """
+    if len(notes) < 3:
+        return notes
+
+    merged = list(notes)
+    changed = True
+
+    while changed:
+        changed = False
+        new_list = []
+        i = 0
+        while i < len(merged):
+            n = merged[i]
+            if n.duration >= min_dur:
+                new_list.append(n)
+                i += 1
+                continue
+
+            # Short note — merge only with same-pitch neighbor
+            prev = new_list[-1] if new_list else None
+            nxt = merged[i + 1] if i + 1 < len(merged) else None
+
+            if prev and prev.pitch == n.pitch:
+                end = n.onset + n.duration
+                new_list[-1] = Note(
+                    pitch=prev.pitch, onset=prev.onset,
+                    duration=round(end - prev.onset, 4), velocity=prev.velocity,
+                )
+                changed = True
+                i += 1
+                continue
+
+            if nxt and nxt.pitch == n.pitch:
+                new_end = nxt.onset + nxt.duration
+                new_list.append(Note(
+                    pitch=n.pitch, onset=n.onset,
+                    duration=round(new_end - n.onset, 4), velocity=n.velocity,
+                ))
+                changed = True
+                i += 2
+                continue
+
+            # Different pitch — keep as-is
+            new_list.append(n)
+            i += 1
+
+        merged = new_list
+
+    if len(merged) < len(notes):
+        logger.info(
+            "Short note consolidation: %d -> %d notes (min_dur=%.0fms)",
+            len(notes), len(merged), min_dur * 1000,
+        )
+    return merged
 
 
 def _merge_same_pitch(

@@ -1,0 +1,29 @@
+{
+  "summary": {
+    "avg_melody_f1_strict": 0.0346,
+    "avg_melody_f1_lenient": 0.1137,
+    "avg_pitch_class_f1": 0.136,
+    "avg_onset_f1": 0.4722,
+    "avg_chroma_similarity": 0.9918,
+    "avg_contour_similarity": 0.8,
+    "total_songs": 1
+  },
+  "songs": {
+    "꿈의 버스": {
+      "melody_f1_strict": 0.03461063040791101,
+      "melody_f1_lenient": 0.11372064276885042,
+      "pitch_class_f1": 0.13597033374536463,
+      "pitch_class_precision": 0.16566265060240964,
+      "pitch_class_recall": 0.11530398322851153,
+      "onset_f1": 0.4721878862793572,
+      "chroma_similarity": 0.9918201736783502,
+      "contour_similarity": 0.8,
+      "note_count_ratio": 0.696,
+      "note_counts": {
+        "ref": 477,
+        "gen": 332
+      },
+      "processing_time": 2.7
+    }
+  }
+}
