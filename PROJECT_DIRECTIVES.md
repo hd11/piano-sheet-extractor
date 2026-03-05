@@ -45,6 +45,10 @@
 
 ## 변경 이력
 
+> **버전 번호 주의**: git 이력에는 리뉴얼 이전 구 시스템(v9~v21, pc_f1 기반, 참조 보정 포함)의
+> 커밋이 남아있음. 아래 v1 Reset 이후 버전들은 **완전히 다른 새 시스템**으로 번호가 겹쳐도
+> 다른 실험임. 리뉴얼 이전 커밋의 메트릭(pc_f1 0.7~, mel_strict 0.29~)은 무효 수치.
+
 ### v1 Reset (2026-03-03) — 프로젝트 초기화, 올바른 평가 체계 구축
 
 **이유**: v9~v21(47+ 실험)에서 evaluate.py가 참조 기반 보정(time offset, octave correction)을 적용한 후 평가하여 메트릭이 부풀려짐. 실제 MusicXML 출력물과 평가 노트가 달랐기 때문에 모든 메트릭이 무의미했음.
@@ -695,6 +699,25 @@ f0_hz = rmvpe.infer_from_audio(audio_16k, thred=0.03)
 2. Vocal-to-sheet gap 축소: 참조 분석 기반 세그먼테이션 전략 개선
 3. BPM 정밀도 향상 (librosa.beat.tempo 대안 탐색)
 4. CREPE+FCPE 앙상블 (각 곡에서 더 나은 결과 선택)
+
+### v24 Dedup + BPM 3:2 초기 적용 (2026-03-05) — onset 충돌 제거 + 템포 보정
+
+**이유**: v22(0.074) 이후 MusicXML note loss 분석에서 beat snap이 여러 노트를 동일 grid point로
+이동시켜 onset 충돌 발생(Golden 18.6% 손실). 또한 Golden BPM=123 추정 vs 실제 ref=183 (3:2 비율)
+감지 — 기존 2:1 검증만 있어 3:2 오류 미감지.
+
+**변경 사항**:
+1. `core/postprocess.py` — `_dedup_close_onsets()` 추가 (30ms 이내 onset 충돌 제거)
+2. `core/pipeline.py` — BPM 3:2 disambiguation 추가 (100~140 BPM에서 1.5x 검증)
+
+**결과 (v24, 8곡 평균)**:
+
+| 지표 | v22 | v24 | 변화 |
+|------|-----|-----|------|
+| mel_strict | 0.074 | **0.075** | +1.4% |
+| onset_f1 | 0.452 | **0.450** | -0.4% |
+
+- 소폭 개선에 그침 → outlier threshold 조정으로 이어짐 (v25)
 
 ### v25 Parameter Tuning + BPM 3:2 (2026-03-05) — 포스트프로세싱 최적화
 
