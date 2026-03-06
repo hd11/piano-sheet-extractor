@@ -7,6 +7,7 @@ individual Note objects with MIDI pitch, onset, and duration.
 import logging
 from typing import List
 
+import librosa
 import numpy as np
 
 from .types import F0Contour, Note
@@ -110,6 +111,115 @@ def segment_notes(
 
     return notes
 
+
+def segment_notes_onset(
+    contour: F0Contour,
+    audio: np.ndarray,
+    sr: int,
+    min_note_duration: float = 0.05,
+    min_voiced_ratio: float = 0.25,
+    onset_delta: float = 0.07,
+) -> List[Note]:
+    """Syllable-onset based note segmentation.
+
+    Instead of grouping consecutive same-pitch F0 frames, this function:
+    1. Detects vocal syllable onsets from the audio signal
+    2. For each onset interval, computes the median voiced MIDI pitch
+    3. Skips intervals with insufficient voiced frames (rests)
+
+    This produces notes aligned to actual vocal articulations rather than
+    F0 pitch changes, which tends to match sheet music note boundaries better.
+
+    Args:
+        contour: F0Contour from pitch extractor.
+        audio: Mono audio array (vocals) at sample rate sr.
+        sr: Sample rate of audio.
+        min_note_duration: Minimum note duration in seconds.
+        min_voiced_ratio: Minimum fraction of voiced F0 frames in interval.
+        onset_delta: Onset detection sensitivity (higher = fewer onsets).
+
+    Returns:
+        List of Note objects aligned to vocal onsets.
+    """
+    freqs = contour.frequencies.copy()
+    times = contour.times
+
+    if len(freqs) == 0:
+        return []
+
+    step = float(times[1] - times[0]) if len(times) > 1 else 0.01
+    total_dur = float(times[-1]) + step
+
+    # Hz -> MIDI (0 for unvoiced)
+    voiced = freqs > 0
+    midi = np.zeros(len(freqs), dtype=int)
+    midi[voiced] = np.round(12.0 * np.log2(freqs[voiced] / 440.0) + 69.0).astype(int)
+
+    # Detect vocal onsets from audio amplitude envelope
+    onset_frames = librosa.onset.onset_detect(
+        y=audio,
+        sr=sr,
+        delta=onset_delta,
+        backtrack=True,  # snap to nearest local minimum before peak
+        units="frames",
+    )
+    onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+
+    # Add implicit start and end boundaries
+    boundaries = np.concatenate([[0.0], onset_times, [total_dur]])
+    boundaries = np.unique(boundaries)
+
+    logger.info(
+        "Onset segmentation: %d onsets detected (delta=%.2f)",
+        len(onset_times), onset_delta,
+    )
+
+    notes: List[Note] = []
+    for i in range(len(boundaries) - 1):
+        t_start = float(boundaries[i])
+        t_end = float(boundaries[i + 1])
+        duration = t_end - t_start
+
+        if duration < min_note_duration:
+            continue
+
+        # F0 frames in this interval
+        frame_start = int(t_start / step)
+        frame_end = int(t_end / step)
+        frame_end = min(frame_end, len(midi))
+
+        if frame_start >= frame_end:
+            continue
+
+        segment_midi = midi[frame_start:frame_end]
+        voiced_midi = segment_midi[segment_midi > 0]
+
+        if len(voiced_midi) < len(segment_midi) * min_voiced_ratio:
+            continue  # rest
+
+        # Median pitch of voiced frames
+        pitch = int(np.round(np.median(voiced_midi)))
+
+        if 21 <= pitch <= 108:
+            notes.append(Note(
+                pitch=pitch,
+                onset=round(t_start, 4),
+                duration=round(duration, 4),
+            ))
+
+    logger.info(
+        "Onset segmented %d notes from %d intervals (%.1fs)",
+        len(notes), len(boundaries) - 1, total_dur,
+    )
+
+    if notes:
+        pitches = [n.pitch for n in notes]
+        logger.info(
+            "Pitch range: MIDI %d-%d, median=%d",
+            min(pitches), max(pitches), int(np.median(pitches)),
+        )
+
+    return notes
 
 def segment_notes_quantized(
     contour: F0Contour,

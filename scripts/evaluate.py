@@ -185,7 +185,7 @@ def main():
         "--mode",
         type=str,
         default="crepe",
-        choices=["crepe", "fcpe", "rmvpe", "ensemble", "bp"],
+        choices=["crepe", "fcpe", "rmvpe", "ensemble", "onset", "bp"],
         help="F0 extraction mode (default: crepe)",
     )
 

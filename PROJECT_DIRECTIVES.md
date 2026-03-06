@@ -773,3 +773,44 @@ Gap bridging:
 1. Diatonic gate 개선 — minor scale template, adaptive threshold
 2. 곡별 adaptive parameter 탐색
 3. Note-level 후처리 개선 (segmenter, postprocess 체인)
+
+### v17 Onset-Based Segmentation (2026-03-06) — 음절 기반 노트 분리, 전체 평균 하락
+
+**배경**: FCPE의 F0 프레임 경계 기반 세그멘테이션 대신 보컬 음절(syllable) 단위로 노트를 분리하는 새 방식 시도. 사람의 노래는 음절마다 새 음표가 시작되므로 이론적으로 악보 노트 경계와 더 잘 일치할 것이라는 가설.
+
+**변경 사항**:
+- `core/note_segmenter.py` — `segment_notes_onset()` 함수 추가
+  - librosa onset detection(backtrack=True, delta=0.03) → 음절 경계 탐지
+  - 각 경계 구간에서 voiced MIDI 중앙값 → Note 생성
+  - min_voiced_ratio=0.25 미만 구간 → rest 처리
+- `core/pipeline.py` — `mode="onset"` 분기 추가 (FCPE F0 + onset_segmenter)
+- `scripts/evaluate.py` — "onset" 선택지 추가
+
+**FCPE vs Onset 8곡 비교 (onset_delta=0.03)**:
+
+| 곡 | FCPE | Onset | 차이 |
+|----|------|-------|------|
+| Golden | 0.0279 | 0.0281 | +1.0% |
+| IRIS OUT | **0.3199** | 0.0748 | **-76.6%** |
+| 꿈의 버스 | 0.0519 | 0.0569 | +9.5% |
+| 너에게100퍼센트 | 0.0907 | **0.1080** | +19.1% |
+| 달리 표현할 수 없어요 | 0.0371 | 0.0201 | -45.7% |
+| 비비드라라러브 | 0.0725 | 0.0757 | +4.4% |
+| 등불을 지키다 | 0.0505 | 0.0568 | +12.6% |
+| 여름이었다 | 0.0747 | 0.0621 | -16.9% |
+| **평균** | **0.0907** | **0.0603** | **-33.5%** |
+
+**분석**:
+- IRIS OUT 한 곡이 0.32→0.07로 붕괴(-76.6%) → 전체 평균을 크게 끌어내림
+- IRIS OUT 제외 시: FCPE 0.0579 vs Onset 0.0582 (+0.5%, 사실상 동등)
+- Onset 개선 곡(+19.1%, +12.6%, +9.5%, +4.4%, +1.0%)과 악화 곡(-76.6%, -45.7%, -16.9%) 명확히 분리
+- IRIS OUT 실패 원인: 734 ref 음표로 매우 조밀한 보컬 → onset detector가 경계를 잘못 잡음
+- 달리 실패 원인: 특정 음향 특성에서 onset 탐지 신뢰도 낮음
+
+**결론**: Onset 세그멘테이션은 현재 형태로 채택 불가. FCPE standard가 여전히 최선.
+단, 일부 곡에서 onset 방식이 유효하므로 per-song 선택 또는 hybrid 방식 가능성 있음.
+
+**다음 방향**:
+1. beat-grid 양자화 세그먼테이션 (`segment_notes_quantized`) 실험
+2. IRIS OUT 근본 원인 분석 — 모든 실험에서 어려운 곡
+3. postprocess 체인 개선 (diatonic gate, self-octave 등)

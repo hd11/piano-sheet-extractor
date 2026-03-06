@@ -7,6 +7,7 @@ Pipeline modes:
   crepe:  MP3 -> Demucs -> CREPE F0  -> note_segmenter -> postprocess -> MusicXML
   fcpe:   MP3 -> Demucs -> FCPE F0   -> note_segmenter -> postprocess -> MusicXML
   rmvpe:  MP3 -> Demucs -> RMVPE F0  -> note_segmenter -> postprocess -> MusicXML
+  onset:  MP3 -> Demucs -> FCPE F0   -> onset_segmenter (syllable-based) -> postprocess -> MusicXML
   bp:     MP3 -> Demucs -> Basic Pitch + CQT octave correction -> postprocess -> MusicXML
 """
 
@@ -19,7 +20,7 @@ import numpy as np
 
 from .musicxml_writer import save_musicxml
 from .note_extractor_bp import extract_notes_bp
-from .note_segmenter import segment_notes, segment_notes_quantized
+from .note_segmenter import segment_notes, segment_notes_quantized, segment_notes_onset
 from .pitch_extractor import extract_f0 as extract_f0_crepe
 from .pitch_extractor_ensemble import extract_f0_ensemble
 from .pitch_extractor_fcpe import extract_f0 as extract_f0_fcpe
@@ -83,6 +84,11 @@ def extract_melody(
         contour = extract_f0_rmvpe(vocals, sr)
         logger.info("Step 4: Note segmentation")
         notes = segment_notes(contour)
+    elif mode == "onset":
+        logger.info("Step 3: Pitch extraction (FCPE) + onset-based segmentation")
+        contour = extract_f0_fcpe(vocals, sr)
+        logger.info("Step 4: Note segmentation (syllable onset)")
+        notes = segment_notes_onset(contour, vocals_22k, 22050)
     elif mode == "ensemble":
         logger.info("Step 3: Pitch extraction (FCPE+RMVPE ensemble)")
         contour = extract_f0_ensemble(vocals, sr)
