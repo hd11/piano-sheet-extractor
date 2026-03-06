@@ -814,3 +814,52 @@ Gap bridging:
 1. beat-grid 양자화 세그먼테이션 (`segment_notes_quantized`) 실험
 2. IRIS OUT 근본 원인 분석 — 모든 실험에서 어려운 곡
 3. postprocess 체인 개선 (diatonic gate, self-octave 등)
+
+### v18 Hybrid Segmentation (2026-03-06) — 피치 안정성 + onset 재공격 감지
+
+**이유**: v15 FCPE(mel_strict=0.090)가 수치상 최고이나 청음 시 "음표가 너무 많고 파편적".
+v17 onset(음절 기반)은 노트 수는 적절하나 피치 정확도 하락(-33.5%).
+사용자 피드백: "음절 기준으로 맞췄으면 좋겠는데, 노래가 딱딱 음절에 맞춰 하는 건 아님"
+
+**핵심 문제**: 기존 `segment_notes()`가 MIDI 정수 1 차이에도 새 노트 생성 → 비브라토(±50cents)에서 노트 파편화
+
+**변경 사항**:
+- `core/note_segmenter.py` — `segment_notes_hybrid()` 전면 재설계
+  - **v18a (첫 시도)**: FCPE segment_notes() → onset 경계로 병합 → 329노트 (구멍 많음)
+  - **v18b (gap fill 추가)**: 빈 구간에서 raw F0 median 폴백 → 381노트 (구멍 줄음, 여전히 부족)
+  - **v18c (피치 안정성, 현재)**: 완전히 새로운 접근
+    - Float MIDI 사용 (정수 반올림 안 함 → sub-semitone 정보 보존)
+    - ±1.5st tolerance로 같은 노트 유지 (비브라토 흡수)
+    - onset 감지는 같은 피치 재공격(syllable repeat)에만 사용
+    - running center: alpha=0.05로 느리게 이동 (portamento 추적)
+    - 최종 피치 = 프레임 median의 반올림
+    - gap bridging: max_gap_frames=5 (50ms) 이내 무성 구간 연결
+- `core/pipeline.py` — `mode="hybrid"` 추가 (FCPE F0 → hybrid segmenter → postprocess)
+
+**폐기한 시도**:
+- v18a onset 병합 방식: FCPE 노트를 onset 구간에 병합 → 329노트지만 구멍 많음
+- v18b gap fill: raw F0 폴백 추가 → 381노트, 개선은 됐으나 근본적 한계 (onset 경계 정확도)
+
+**꿈의 버스 단일곡 결과**:
+- v18c: 496노트 (ref 477과 거의 일치)
+- FCPE: 524노트 (과다), Onset: 367노트 (부족)
+
+**v18c 피치 안정성 세그먼터 — 폐기**:
+- float MIDI ±1.5st tolerance + onset 재공격 + running center(alpha=0.05)
+- 꿈의 버스 496노트(ref 477과 유사)이나 청음 결과 "완전 이상하다"
+- 원인 추정: running center drift로 피치가 점진적으로 이탈, 비브라토 흡수가 오히려 피치 정확도 파괴
+- **교훈**: F0 프레임 레벨 세그멘테이션을 직접 재구현하면 FCPE segment_notes()의 검증된 로직을 잃음. FCPE 노트를 기반으로 병합하는 v18b 방식이 더 안전
+
+**최종 채택: v18b** (FCPE segment_notes → onset 병합 → gap fill)
+- 사용자 평가: "지금까지 들었던 것 중에 제일 나은데 구멍이 있음, 내 기준 0.5"
+- 꿈의 버스: 381노트 (FCPE 524 → 27% 감소, ref 477의 80%)
+
+**폐기: delta=0.05, ratio=0.2 튜닝**:
+- 꿈의 버스 381→465노트, 전체 +22% 증가
+- 청음 결과 "중복된 같은 음이 많아진 것 같다" → onset 경계가 너무 민감해져 같은 피치 구간을 여러 노트로 쪼갬
+- **원복: delta=0.07, ratio=0.25**
+
+**다음 방향**:
+- 구멍 문제는 onset_delta 조절이 아닌 다른 접근 필요
+- 같은 피치 연속 노트 병합 (postprocess에서 hybrid 출력에 맞게)
+- postprocess 체인이 hybrid 출력에 최적화되었는지 확인

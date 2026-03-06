@@ -221,6 +221,146 @@ def segment_notes_onset(
 
     return notes
 
+def segment_notes_hybrid(
+    contour: F0Contour,
+    audio: np.ndarray,
+    sr: int,
+    min_note_duration: float = 0.05,
+    max_gap_frames: int = 5,
+    onset_delta: float = 0.07,
+    min_voiced_ratio: float = 0.25,
+) -> List[Note]:
+    """Hybrid segmentation: FCPE pitch accuracy + onset syllable boundaries.
+
+    Combines the best of both approaches:
+    1. Run standard segment_notes() for pitch-accurate note detection
+    2. Detect vocal onset boundaries (syllable starts)
+    3. Within each onset interval, merge notes into one using dominant pitch
+    4. For intervals with no FCPE notes, fall back to raw F0 median (gap fill)
+
+    Args:
+        contour: F0Contour from pitch extractor.
+        audio: Mono audio array (vocals) at sample rate sr.
+        sr: Sample rate of audio.
+        min_note_duration: Minimum note duration for initial segmentation.
+        max_gap_frames: Gap bridging for initial segmentation.
+        onset_delta: Onset detection sensitivity (higher = fewer onsets).
+
+    Returns:
+        List of Note objects with syllable-level density and FCPE pitch accuracy.
+    """
+    # Step 1: Get pitch-accurate notes from standard segmentation
+    detailed_notes = segment_notes(
+        contour,
+        min_note_duration=min_note_duration,
+        max_gap_frames=max_gap_frames,
+    )
+
+    # Step 2: Prepare raw F0 MIDI for gap fallback
+    freqs = contour.frequencies.copy()
+    times = contour.times
+    step = float(times[1] - times[0]) if len(times) > 1 else 0.01
+    voiced_mask = freqs > 0
+    midi_raw = np.zeros(len(freqs), dtype=int)
+    midi_raw[voiced_mask] = np.round(
+        12.0 * np.log2(freqs[voiced_mask] / 440.0) + 69.0
+    ).astype(int)
+
+    # Step 3: Detect vocal syllable onsets
+    onset_frames = librosa.onset.onset_detect(
+        y=audio,
+        sr=sr,
+        delta=onset_delta,
+        backtrack=True,
+        units="frames",
+    )
+    onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+
+    total_dur = float(times[-1]) + step if len(times) > 0 else 0.0
+    boundaries = np.concatenate([[0.0], onset_times, [total_dur]])
+    boundaries = np.unique(boundaries)
+
+    logger.info(
+        "Hybrid segmentation: %d detailed notes, %d onset boundaries (delta=%.2f)",
+        len(detailed_notes), len(onset_times), onset_delta,
+    )
+
+    # Step 4: Assign each note to its onset interval, merge within interval
+    notes: List[Note] = []
+    note_idx = 0
+    fallback_count = 0
+
+    for i in range(len(boundaries) - 1):
+        t_start = float(boundaries[i])
+        t_end = float(boundaries[i + 1])
+        interval_dur = t_end - t_start
+
+        if interval_dur < min_note_duration:
+            continue
+
+        # Collect notes whose onset falls in this interval
+        interval_notes: List[Note] = []
+        while note_idx < len(detailed_notes) and detailed_notes[note_idx].onset < t_end:
+            if detailed_notes[note_idx].onset >= t_start:
+                interval_notes.append(detailed_notes[note_idx])
+            note_idx += 1
+
+        if interval_notes:
+            # Normal path: merge FCPE notes using dominant pitch
+            pitch_dur: dict = {}
+            for n in interval_notes:
+                pitch_dur[n.pitch] = pitch_dur.get(n.pitch, 0.0) + n.duration
+            dominant_pitch = max(pitch_dur, key=pitch_dur.get)
+
+            first_onset = interval_notes[0].onset
+            last_end = max(n.onset + n.duration for n in interval_notes)
+            duration = last_end - first_onset
+
+            if duration >= min_note_duration and 21 <= dominant_pitch <= 108:
+                notes.append(Note(
+                    pitch=dominant_pitch,
+                    onset=round(first_onset, 4),
+                    duration=round(duration, 4),
+                ))
+        else:
+            # Gap fallback: check raw F0 contour for voiced frames
+            frame_start = int(t_start / step)
+            frame_end = min(int(t_end / step), len(midi_raw))
+            if frame_start >= frame_end:
+                continue
+
+            segment_midi = midi_raw[frame_start:frame_end]
+            voiced_midi = segment_midi[segment_midi > 0]
+
+            if len(voiced_midi) >= len(segment_midi) * min_voiced_ratio:
+                pitch = int(np.round(np.median(voiced_midi)))
+                if 21 <= pitch <= 108:
+                    notes.append(Note(
+                        pitch=pitch,
+                        onset=round(t_start, 4),
+                        duration=round(interval_dur, 4),
+                    ))
+                    fallback_count += 1
+
+    if fallback_count > 0:
+        logger.info("Hybrid gap fill: %d notes from raw F0 fallback", fallback_count)
+
+    logger.info(
+        "Hybrid: %d -> %d notes (%.0f%% reduction)",
+        len(detailed_notes), len(notes),
+        (1 - len(notes) / max(len(detailed_notes), 1)) * 100,
+    )
+
+    if notes:
+        pitches = [n.pitch for n in notes]
+        logger.info(
+            "Pitch range: MIDI %d-%d, median=%d",
+            min(pitches), max(pitches), int(np.median(pitches)),
+        )
+
+    return notes
+
+
 def segment_notes_quantized(
     contour: F0Contour,
     bpm: float,

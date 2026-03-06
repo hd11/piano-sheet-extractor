@@ -20,7 +20,7 @@ import numpy as np
 
 from .musicxml_writer import save_musicxml
 from .note_extractor_bp import extract_notes_bp
-from .note_segmenter import segment_notes, segment_notes_quantized, segment_notes_onset
+from .note_segmenter import segment_notes, segment_notes_quantized, segment_notes_onset, segment_notes_hybrid
 from .pitch_extractor import extract_f0 as extract_f0_crepe
 from .pitch_extractor_ensemble import extract_f0_ensemble
 from .pitch_extractor_fcpe import extract_f0 as extract_f0_fcpe
@@ -84,6 +84,11 @@ def extract_melody(
         contour = extract_f0_rmvpe(vocals, sr)
         logger.info("Step 4: Note segmentation")
         notes = segment_notes(contour)
+    elif mode == "hybrid":
+        logger.info("Step 3: Pitch extraction (FCPE) + hybrid segmentation")
+        contour = extract_f0_fcpe(vocals, sr)
+        logger.info("Step 4: Note segmentation (FCPE pitch + onset boundaries)")
+        notes = segment_notes_hybrid(contour, vocals_22k, 22050)
     elif mode == "onset":
         logger.info("Step 3: Pitch extraction (FCPE) + onset-based segmentation")
         contour = extract_f0_fcpe(vocals, sr)
