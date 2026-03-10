@@ -16,7 +16,7 @@ from .types import Note
 logger = logging.getLogger(__name__)
 
 # Vocal range limits (MIDI)
-VOCAL_RANGE_LOW = 48   # C3
+VOCAL_RANGE_LOW = 52   # E3
 VOCAL_RANGE_HIGH = 96  # C7
 
 
@@ -661,7 +661,7 @@ def _clip_vocal_range(notes: List[Note]) -> List[Note]:
 
 def _diatonic_gate(
     notes: List[Note],
-    max_chromatic_duration: float = 0.15,
+    max_chromatic_duration: float = 0.12,
 ) -> List[Note]:
     """Remove short out-of-key notes (likely CREPE artifacts).
 
@@ -717,7 +717,7 @@ def _diatonic_gate(
 
 def _dedup_close_onsets(
     notes: List[Note],
-    min_gap: float = 0.030,
+    min_gap: float = 0.050,
 ) -> List[Note]:
     """Remove near-simultaneous notes created by beat snap collisions.
 

@@ -910,6 +910,24 @@ v17 onset(음절 기반)은 노트 수는 적절하나 피치 정확도 하락(-
 
 **Phase 1 핵심 교훈**: mel_strict의 병목은 후처리가 아닌 F0 피치 정확도. pitch_miss=1274(31%)가 주요 오류원이며 옥타브 오류(111, 4.1%)는 소수. ±2st 오류(560)가 최다 → 하모닉 혼동이 FCPE의 근본적 한계. chroma_similarity(0.975) >> mel_strict(0.090)는 피치 클래스는 정확하지만 레지스터/타이밍이 문제임을 확인.
 
+### v20 Plan (2026-03-10) — 3-agent 합의 계획 (Planner→Architect→Critic)
+
+**목표**: mel_strict 0.091 → 0.12+
+**전략**: FP 노트 감소로 정밀도 향상 (IRIS OUT 0.55 ratio = 3.5x mel_strict 근거)
+**상세 계획**: `.omc/plans/v20-note-precision-plan.md`
+
+**실행 순서 (Critic 승인)**:
+1. min_note_duration 50ms → 80ms (note_segmenter.py)
+2. Dedup threshold 30ms → 50ms (postprocess.py)
+3. Steps 1+2 합산 상호작용 검증
+4. VOCAL_RANGE_LOW 48→52 (HIGH=96 유지, IRIS OUT ref 최고=MIDI 95)
+5b. 자연단음계 템플릿 추가 (postprocess.py, 먼저 실행)
+5a. Diatonic gate 0.15s → 0.12s (postprocess.py)
+6. 누적 통합 최종 평가
+
+**드롭**: Step 2(CREPE confidence threshold) — FCPE 파이프라인에서 no-op
+**수정**: Step 4 HIGH=88 → 96 유지 (IRIS OUT ref 최고 MIDI 95 보호)
+
 **Phase 2 완료 (2026-03-10)**: 파이프라인 변경 없이 평가 체계 개선
 
 **Step 6 결과: 기각** (contour-following reference): skyline(0.091) > contour(0.087). contour-following은 내성부 음표를 선택하여 chroma 0.975→0.951 하락. 피아노 편곡에서 skyline이 더 정확한 멜로디 추출. `extract_reference_melody(method="contour")` 구현 완료하나 default는 skyline 유지.
@@ -946,3 +964,64 @@ v17 onset(음절 기반)은 노트 수는 적절하나 피치 정확도 하락(-
 - contour reference: skyline 대비 열위, 기각
 - **mel_strict 0.091 = 현 파이프라인의 실질적 상한**. 의미있는 개선을 위해서는 F0 추출 자체의 개선(서브하모닉/하모닉 혼동 해결)이 필요
 - 향후 방향: (a) 더 나은 F0 모델 탐색, (b) perceptual_score를 보조 지표로 활용, (c) mel_strict_oct로 옥타브 보정 효과 추적
+
+**v20 실행 결과 (2026-03-10)**:
+
+**Step 1 (min_note_duration 50→80ms)**: **기각/복구**
+- 결과: mel_strict 0.091 → 0.082 (-9.9%, regression)
+- 비비드라라러브: -0.035 (가장 큰 피해)
+- 원인: 80ms는 실제 보컬 음표를 걸러냄. F0 지터 아티팩트가 아닌 진짜 짧은 음표 제거
+- 복구: note_segmenter.py min_note_duration=0.05 유지
+- 결과 파일: `results/v20_step1_mindur80.json`
+
+**Step 2 (CREPE confidence threshold)**: 드롭 (FCPE 파이프라인에서 no-op)
+
+**Step 3 (dedup 30→50ms)**: **중립 → 유지**
+- 결과: mel_strict 0.091 (변화 없음)
+- 원인: beat snap 후 노트는 이미 >50ms 간격. 실질 변화 없음
+- 논리적 정합성이 있으므로 유지 (50ms 이내 두 노트는 어차피 참조 하나에만 매칭 가능)
+- 결과 파일: `results/v20_step3_dedup50.json`
+
+**Step 4 (VOCAL_RANGE_LOW 48→52)**: **중립 → 유지**
+- 결과: mel_strict 0.091 (변화 없음)
+- 원인: 8곡 중 MIDI 52 이하 참조 음표 없음. 실질 변화 없음
+- 논리적 정합성으로 유지 (VOCAL_RANGE_HIGH=96 유지, IRIS OUT ref 최고=MIDI 95)
+- 결과 파일: `results/v20_step4_vocalrange.json`
+
+**Step 5b (자연단음계 템플릿)**: **기각/복구**
+- 결과: mel_strict 0.091 (변화 없음, 구조적 no-op)
+- 원인: 자연단음계 [0,2,3,5,7,8,10]은 장음계 [0,2,4,5,7,9,11]의 관계단조(relative minor)
+  와 동일한 7개 피치 클래스를 공유. key_chromas 집합이 변하지 않아 어떤 음표도 걸러지거나 보존되는 방식이 달라지지 않음
+- 복구: postprocess.py 단음계 템플릿 추가 코드 제거
+- 결과 파일: `results/v20_step5b_minor.json`
+
+**Step 5a (diatonic gate 0.15→0.12s)**: **중립 → 유지**
+- 결과: mel_strict 0.091 (변화 없음), IRIS OUT 0.323 (+0.003)
+- 원인: 현재 곡들에서 0.12~0.15s 구간의 반음계 음표가 거의 없음
+- 논리적 정합성으로 유지
+- 결과 파일: `results/v20_step5a_diatonic12.json`
+
+**v20 최종 결과 (results/v20_final.json)**:
+
+| Song | mel_strict | mel_strict_oct | notes |
+|------|-----------|---------------|-------|
+| Golden | 0.028 | 0.047 | 561/588 |
+| IRIS OUT | 0.323 | 0.377 | 417/734 |
+| 꿈의 버스 | 0.052 | 0.074 | 528/477 |
+| 너에게100퍼센트 | 0.090 | 0.095 | 549/649 |
+| 달리 표현할 수 없어요 | 0.036 | 0.039 | 743/607 |
+| 등불을 지키다 | 0.050 | 0.065 | 458/653 |
+| 비비드라라러브 | 0.072 | 0.096 | 485/455 |
+| 여름이었다 | 0.075 | 0.085 | 528/625 |
+| **AVG** | **0.091** | **0.110** | — |
+
+**v20 최종 코드 상태**:
+- `core/postprocess.py`: VOCAL_RANGE_LOW=52, dedup min_gap=0.050, max_chromatic_duration=0.12
+- `core/note_segmenter.py`: min_note_duration=0.05 (변경 없음)
+
+**v20 종합 결론**:
+- 목표(0.12+) 달성 실패. mel_strict 0.091 변화 없음
+- 파라미터 튜닝(후처리 레이어) 차원에서는 개선 여지 소진
+- **근본 원인 재확인**: 하모닉 혼동(±2-7 semitone, 31% of errors)과 F0 subharmonic이 mel_strict 병목
+- 후처리 파라미터 단순 조정으로는 한계. F0 모델 자체 개선 필요
+- **향후 방향**: RMVPE/CREPE 앙상블 실험, 혹은 더 정밀한 보컬 특화 F0 모델 탐색
