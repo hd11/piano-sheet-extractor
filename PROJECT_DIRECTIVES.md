@@ -1108,3 +1108,47 @@ v17 onset(음절 기반)은 노트 수는 적절하나 피치 정확도 하락(-
 - Phase A 완료 (모두 중립/기각)
 - Phase B1 차단 (RMVPE 모델 다운로드 불가)
 - 다음 단계: RMVPE 모델 수동 다운로드 후 B1 평가, 또는 다른 개선 방향 탐색
+
+---
+
+## 다음 환경에서 재개하는 방법 (v21 B1 재개)
+
+> **이 섹션은 새 환경에서 그대로 따라하면 됨**
+
+### 1단계: 저장소 준비
+
+```bash
+git clone https://github.com/hd11/piano-sheet-extractor.git
+cd piano-sheet-extractor
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2단계: RMVPE 모델 다운로드 (핵심)
+
+```bash
+curl -L -o models/rmvpe.pt "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/rmvpe.pt"
+```
+
+> 정상 다운로드 확인: `ls -lh models/rmvpe.pt` → 약 181MB 이어야 함
+> HTML 파일(452B)이면 다운로드 실패 — 다른 네트워크 필요
+
+### 3단계: B1 평가 실행
+
+```bash
+python scripts/evaluate.py --mode multi --output results/v21_b1_multi_model.json
+```
+
+### 4단계: 결과 판정
+
+결과 파일 `results/v21_b1_multi_model.json` 확인:
+- **수락 기준**: avg mel_strict delta ≥ 0.010 (baseline: 0.091)
+- **IRIS OUT 보호**: mel_strict ≥ 0.250 (현재 baseline: 0.323)
+- 수락 시 → 결과를 PROJECT_DIRECTIVES.md v21 섹션에 기록 후 커밋
+- 기각 시 → `core/pipeline.py`에서 mode="multi" 분기 제거 후 다음 방향 탐색
+
+### 5단계: B1 수락 후 다음 실험 (B2)
+
+B1이 성공하면 `results/v21_b2_adaptive.json` 목표로 B2 (곡별 적응형 파라미터) 진행
+상세 계획은 `.omc/plans/improvement-analysis.md` 참고
