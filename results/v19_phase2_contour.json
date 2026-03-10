@@ -1,0 +1,175 @@
+{
+  "summary": {
+    "avg_melody_f1_strict": 0.0872,
+    "avg_melody_f1_strict_oct": 0.1052,
+    "avg_melody_f1_lenient": 0.1532,
+    "avg_pitch_class_f1": 0.1859,
+    "avg_onset_f1": 0.5252,
+    "avg_chroma_similarity": 0.9507,
+    "avg_contour_similarity": 0.7706,
+    "avg_perceptual_score": 0.5364,
+    "total_songs": 8
+  },
+  "songs": {
+    "Golden": {
+      "melody_f1_strict": 0.02959094865100087,
+      "melody_f1_strict_oct": 0.055700609225413394,
+      "melody_f1_lenient": 0.08006962576153177,
+      "pitch_class_f1": 0.13054830287206268,
+      "pitch_class_precision": 0.13368983957219252,
+      "pitch_class_recall": 0.12755102040816327,
+      "onset_f1": 0.4804177545691906,
+      "chroma_similarity": 0.9868068260931677,
+      "contour_similarity": 0.7613264829518916,
+      "pitch_accuracy_at_onset": 0.11224489795918367,
+      "rhythm_similarity": 0.6613739760804517,
+      "perceptual_score": 0.47170809689337645,
+      "note_count_ratio": 0.954,
+      "note_counts": {
+        "ref": 588,
+        "gen": 561
+      },
+      "processing_time": 3.5
+    },
+    "IRIS OUT": {
+      "melody_f1_strict": 0.2869718309859155,
+      "melody_f1_strict_oct": 0.33098591549295775,
+      "melody_f1_lenient": 0.3186619718309859,
+      "pitch_class_f1": 0.3661971830985915,
+      "pitch_class_precision": 0.5148514851485149,
+      "pitch_class_recall": 0.28415300546448086,
+      "onset_f1": 0.6161971830985916,
+      "chroma_similarity": 0.9404123017057127,
+      "contour_similarity": 0.7604895104895105,
+      "pitch_accuracy_at_onset": 0.34562841530054644,
+      "rhythm_similarity": 0.6761963056979788,
+      "perceptual_score": 0.5692571109764654,
+      "note_count_ratio": 0.552,
+      "note_counts": {
+        "ref": 732,
+        "gen": 404
+      },
+      "processing_time": 2.0
+    },
+    "꿈의 버스": {
+      "melody_f1_strict": 0.06393606393606395,
+      "melody_f1_strict_oct": 0.0839160839160839,
+      "melody_f1_lenient": 0.13586413586413584,
+      "pitch_class_f1": 0.1678321678321678,
+      "pitch_class_precision": 0.16030534351145037,
+      "pitch_class_recall": 0.1761006289308176,
+      "onset_f1": 0.5614385614385614,
+      "chroma_similarity": 0.8799264353902048,
+      "contour_similarity": 0.7729912875121007,
+      "pitch_accuracy_at_onset": 0.1509433962264151,
+      "rhythm_similarity": 0.8399978528129293,
+      "perceptual_score": 0.544274100588075,
+      "note_count_ratio": 1.099,
+      "note_counts": {
+        "ref": 477,
+        "gen": 524
+      },
+      "processing_time": 2.0
+    },
+    "너에게100퍼센트": {
+      "melody_f1_strict": 0.08228379513014274,
+      "melody_f1_strict_oct": 0.08396305625524768,
+      "melody_f1_lenient": 0.2065491183879093,
+      "pitch_class_f1": 0.21494542401343408,
+      "pitch_class_precision": 0.23616236162361623,
+      "pitch_class_recall": 0.19722650231124808,
+      "onset_f1": 0.5172124265323258,
+      "chroma_similarity": 0.9795373996603377,
+      "contour_similarity": 0.7489823609226595,
+      "pitch_accuracy_at_onset": 0.1802773497688752,
+      "rhythm_similarity": 0.8081956753568992,
+      "perceptual_score": 0.5392643507914177,
+      "note_count_ratio": 0.835,
+      "note_counts": {
+        "ref": 649,
+        "gen": 542
+      },
+      "processing_time": 2.2
+    },
+    "달리 표현할 수 없어요": {
+      "melody_f1_strict": 0.037119524870081654,
+      "melody_f1_strict_oct": 0.0400890868596882,
+      "melody_f1_lenient": 0.15293244246473645,
+      "pitch_class_f1": 0.1648106904231626,
+      "pitch_class_precision": 0.15,
+      "pitch_class_recall": 0.1828665568369028,
+      "onset_f1": 0.5256124721603563,
+      "chroma_similarity": 0.97734077818979,
+      "contour_similarity": 0.7333333333333333,
+      "pitch_accuracy_at_onset": 0.1515650741350906,
+      "rhythm_similarity": 0.9712843638126031,
+      "perceptual_score": 0.5720113387978172,
+      "note_count_ratio": 1.219,
+      "note_counts": {
+        "ref": 607,
+        "gen": 740
+      },
+      "processing_time": 2.7
+    },
+    "등불을 지키다": {
+      "melody_f1_strict": 0.05045045045045045,
+      "melody_f1_strict_oct": 0.06846846846846848,
+      "melody_f1_lenient": 0.05945945945945946,
+      "pitch_class_f1": 0.08648648648648649,
+      "pitch_class_precision": 0.1050328227571116,
+      "pitch_class_recall": 0.07350689127105667,
+      "onset_f1": 0.5783783783783784,
+      "chroma_similarity": 0.9666859459041592,
+      "contour_similarity": 0.8175909878682842,
+      "pitch_accuracy_at_onset": 0.07963246554364471,
+      "rhythm_similarity": 0.9320868420808307,
+      "perceptual_score": 0.5567563352021924,
+      "note_count_ratio": 0.7,
+      "note_counts": {
+        "ref": 653,
+        "gen": 457
+      },
+      "processing_time": 2.4
+    },
+    "비비드라라러브": {
+      "melody_f1_strict": 0.07051282051282051,
+      "melody_f1_strict_oct": 0.09188034188034187,
+      "melody_f1_lenient": 0.13675213675213674,
+      "pitch_class_f1": 0.18589743589743593,
+      "pitch_class_precision": 0.18012422360248448,
+      "pitch_class_recall": 0.19205298013245034,
+      "onset_f1": 0.4188034188034188,
+      "chroma_similarity": 0.9523812862015678,
+      "contour_similarity": 0.8252703471826978,
+      "pitch_accuracy_at_onset": 0.20309050772626933,
+      "rhythm_similarity": 0.4677447297834839,
+      "perceptual_score": 0.46914072618036223,
+      "note_count_ratio": 1.066,
+      "note_counts": {
+        "ref": 453,
+        "gen": 483
+      },
+      "processing_time": 2.6
+    },
+    "여름이었다": {
+      "melody_f1_strict": 0.07645525629887054,
+      "melody_f1_strict_oct": 0.08688097306689835,
+      "melody_f1_lenient": 0.13553431798436144,
+      "pitch_class_f1": 0.17028670721112077,
+      "pitch_class_precision": 0.18631178707224336,
+      "pitch_class_recall": 0.1568,
+      "onset_f1": 0.5039096437880105,
+      "chroma_similarity": 0.9224827888983996,
+      "contour_similarity": 0.7445734477536597,
+      "pitch_accuracy_at_onset": 0.128,
+      "rhythm_similarity": 0.9805605874445339,
+      "perceptual_score": 0.5687402105594581,
+      "note_count_ratio": 0.842,
+      "note_counts": {
+        "ref": 625,
+        "gen": 526
+      },
+      "processing_time": 2.3
+    }
+  }
+}

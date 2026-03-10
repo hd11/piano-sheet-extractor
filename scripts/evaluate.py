@@ -26,7 +26,7 @@ from core.pipeline import extract_melody
 from core.reference_extractor import extract_reference_melody
 
 
-def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path, mode: str = "crepe"):
+def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path, mode: str = "crepe", ref_method: str = "skyline"):
     """Evaluate pipeline on all songs in input directory."""
 
     mp3_files = sorted(glob.glob(str(input_dir / "*.mp3")))
@@ -67,7 +67,7 @@ def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path, mod
 
             # Step 3: Load reference
             ref_notes = [
-                n for n in extract_reference_melody(mxl_path) if n.duration > 0
+                n for n in extract_reference_melody(mxl_path, method=ref_method) if n.duration > 0
             ]
 
             # Step 4: Compare (NO transformations)
@@ -81,11 +81,13 @@ def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path, mod
 
             print(
                 f"  mel_strict={metrics['melody_f1_strict']:.3f}  "
+                f"mel_strict_oct={metrics['melody_f1_strict_oct']:.3f}  "
                 f"mel_lenient={metrics['melody_f1_lenient']:.3f}  "
                 f"pc_f1={metrics['pitch_class_f1']:.3f}  "
                 f"onset={metrics['onset_f1']:.3f}  "
                 f"chroma={metrics['chroma_similarity']:.3f}  "
                 f"contour={metrics['contour_similarity']:.3f}  "
+                f"percept={metrics['perceptual_score']:.3f}  "
                 f"notes={metrics['note_counts']['gen']}/{metrics['note_counts']['ref']}  "
                 f"time={processing_time:.1f}s"
             )
@@ -101,11 +103,13 @@ def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path, mod
         n = len(results["songs"])
         for key in [
             "melody_f1_strict",
+            "melody_f1_strict_oct",
             "melody_f1_lenient",
             "pitch_class_f1",
             "onset_f1",
             "chroma_similarity",
             "contour_similarity",
+            "perceptual_score",
         ]:
             results["summary"][f"avg_{key}"] = round(
                 sum(s[key] for s in results["songs"].values()) / n, 4
@@ -123,32 +127,35 @@ def evaluate_all_songs(input_dir: Path, output_json: Path, output_dir: Path, mod
     print(f"{'=' * 100}")
 
     header = (
-        f"{'Song':<30} | {'mel_strict':<10} | {'mel_lenient':<11} | "
+        f"{'Song':<30} | {'mel_strict':<10} | {'mel_strict_oct':<14} | {'mel_lenient':<11} | "
         f"{'pc_f1':<6} | {'onset':<6} | {'chroma':<6} | "
-        f"{'contour':<7} | {'notes':<12} | {'time':<6}"
+        f"{'contour':<7} | {'percept':<7} | {'notes':<12} | {'time':<6}"
     )
     print(header)
-    print("-" * 100)
+    print("-" * 125)
 
     for stem, m in results["songs"].items():
         nc = m["note_counts"]
         print(
             f"{stem:<30} | {m['melody_f1_strict']:<10.3f} | "
+            f"{m['melody_f1_strict_oct']:<14.3f} | "
             f"{m['melody_f1_lenient']:<11.3f} | {m['pitch_class_f1']:<6.3f} | "
             f"{m['onset_f1']:<6.3f} | {m['chroma_similarity']:<6.3f} | "
-            f"{m['contour_similarity']:<7.3f} | "
+            f"{m['contour_similarity']:<7.3f} | {m['perceptual_score']:<7.3f} | "
             f"{nc['gen']:>4}/{nc['ref']:<6} | {m['processing_time']:<6.1f}s"
         )
 
-    print("-" * 100)
+    print("-" * 125)
     s = results["summary"]
     print(
         f"{'AVERAGE':<30} | {s.get('avg_melody_f1_strict', 0):<10.3f} | "
+        f"{s.get('avg_melody_f1_strict_oct', 0):<14.3f} | "
         f"{s.get('avg_melody_f1_lenient', 0):<11.3f} | "
         f"{s.get('avg_pitch_class_f1', 0):<6.3f} | "
         f"{s.get('avg_onset_f1', 0):<6.3f} | "
         f"{s.get('avg_chroma_similarity', 0):<6.3f} | "
-        f"{s.get('avg_contour_similarity', 0):<7.3f} |"
+        f"{s.get('avg_contour_similarity', 0):<7.3f} | "
+        f"{s.get('avg_perceptual_score', 0):<7.3f} |"
     )
 
     print(f"\nResults saved to: {output_json}")
@@ -188,6 +195,13 @@ def main():
         choices=["crepe", "fcpe", "rmvpe", "ensemble", "onset", "bp"],
         help="F0 extraction mode (default: crepe)",
     )
+    parser.add_argument(
+        "--ref-method",
+        type=str,
+        default="skyline",
+        choices=["skyline", "contour"],
+        help="Reference melody extraction method (default: skyline)",
+    )
 
     args = parser.parse_args()
 
@@ -197,7 +211,7 @@ def main():
     )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    evaluate_all_songs(args.input_dir, args.output, args.output_dir, mode=args.mode)
+    evaluate_all_songs(args.input_dir, args.output, args.output_dir, mode=args.mode, ref_method=args.ref_method)
 
 
 if __name__ == "__main__":

@@ -863,3 +863,86 @@ v17 onset(음절 기반)은 노트 수는 적절하나 피치 정확도 하락(-
 - 구멍 문제는 onset_delta 조절이 아닌 다른 접근 필요
 - 같은 피치 연속 노트 병합 (postprocess에서 hybrid 출력에 맞게)
 - postprocess 체인이 hybrid 출력에 최적화되었는지 확인
+
+### v19 Plan (2026-03-10) — 3-agent 합의 계획 (Planner→Architect→Critic)
+
+**목표**: mel_strict 0.090 → 0.13+ (Phase 1), 0.15 (Phase 1+2)
+
+**핵심 진단**: chroma(0.975) >> mel_strict(0.090) = 피치 클래스는 맞지만 옥타브 레지스터 + 온셋 타이밍이 문제. IRIS OUT 0.315 at 0.55 ratio → 정밀도 > 재현율.
+
+**Phase 1 (파이프라인 개선)**:
+1. [진행중] 진단 스크립트 — 곡별 오류 분류 (`scripts/diagnose.py`)
+2. [대기] 옥타브 정밀도 — adaptive vocal_center(mode), section 15, phrase guard (`postprocess.py`)
+3. [대기] 노트 밀도 조정 — F0 분산 기반 confidence + 밀도 필터 (`note_segmenter.py`, `types.py`, `postprocess.py`)
+4. [진행중] 온셋 정밀도 — onset strength 가중치 + adaptive subdivision (`postprocess.py`)
+5. [진행중] Diatonic gate — minor/pentatonic 템플릿, 반음계 패시지 보존 (`postprocess.py`)
+
+**Phase 2 (평가 체계)**:
+6. [대기] 참조 멜로디 추출 개선 — contour-following
+7. [대기] 지각적 메트릭 — perceptual_score
+8. [대기] 옥타브 허용 메트릭 — mel_strict_oct (평가 전용)
+
+**실행 순서**: Step 1+4+5 병렬 → Step 1 완료 후 Step 2+3 → Phase 1 통합 → Phase 2
+
+**현실적 기대치**: 개별 효과 합산 +0.045~0.09, 상호작용 효과로 50-60% 유지 → 현실적 0.113-0.144. Phase 2 포함 시 0.15 도달 기대.
+
+**상세 계획**: `.omc/plans/mel-strict-0.15-plan.md` 참조
+
+**Step 1 진단 결과 (2026-03-10)**:
+- 총 gen=4125, ref=4788, exact_match=434(10.5%), pitch_miss=1274(31%), onset_miss=293(7%), both_miss=1397(34%), FP=727(18%), FN=2020
+- 옥타브 오류 111개 (피치 오류의 4.1%만) → Step 2 효과 제한적
+- 피치 오류 분포: ±2st=560(최다), ±5st=350, ±7st=292, ±3st=337 → 하모닉 혼동이 주요 원인
+- IRIS OUT: exact=196/367(53.4% precision) — 적은 생성 = 높은 정밀도 확인
+- 온셋 오류: mean=-1.6ms, std=79.8ms → 편향 없음, 분산만 큼
+
+**Step 2 결과: 실패** (mode-based vocal_center): FCPE 출력의 mode pitch=66이 서브하모닉 잠금 값 자체임. 이를 vocal_center로 사용하면 +12 글로벌 옥타브 시프트가 차단됨. 고정 center=75가 올바르게 시프트 필요를 감지. v7b 실패 패턴과 동일. → **REVERTED**
+
+**Step 3 결과: 비활성** (confidence filter): 전곡 노트 밀도 2.1-3.6 n/s < threshold 4.0 → 필터 미작동. FCPE confidence는 binary(0/1)이므로 F0 분산 기반 대안 사용했으나 밀도 조건 미충족. → **REVERTED**
+
+**Step 4 결과: 실패** (onset strength weighting): onset strength 가중치로 FP 9개 추가(533→524 아닌 533 vs 524). mel_strict -27% (0.052→0.038, 꿈의 버스). onset_f1 거의 불변(0.561→0.562). → **REVERTED**
+
+**Step 5 결과: 중립/소폭 악화** (diatonic gate 개선): multi-scale 템플릿 자체는 중립. max_chromatic_duration 0.20은 정확한 노트 4개 추가 제거. 0.15 유지가 최적. → **REVERTED**
+
+**Phase 1 통합 결과 (v19_phase1.json)**:
+- 잔여 변경(section_size=15, phrase guard, multi-scale templates) 결합: mel_strict avg 0.090→0.087 (-3%)
+- 달리 표현할 수 없어요: -0.013 회귀
+- **전체 Phase 1 REVERTED TO BASELINE v26c** (mel_strict avg 0.090)
+
+**Phase 1 핵심 교훈**: mel_strict의 병목은 후처리가 아닌 F0 피치 정확도. pitch_miss=1274(31%)가 주요 오류원이며 옥타브 오류(111, 4.1%)는 소수. ±2st 오류(560)가 최다 → 하모닉 혼동이 FCPE의 근본적 한계. chroma_similarity(0.975) >> mel_strict(0.090)는 피치 클래스는 정확하지만 레지스터/타이밍이 문제임을 확인.
+
+**Phase 2 완료 (2026-03-10)**: 파이프라인 변경 없이 평가 체계 개선
+
+**Step 6 결과: 기각** (contour-following reference): skyline(0.091) > contour(0.087). contour-following은 내성부 음표를 선택하여 chroma 0.975→0.951 하락. 피아노 편곡에서 skyline이 더 정확한 멜로디 추출. `extract_reference_melody(method="contour")` 구현 완료하나 default는 skyline 유지.
+
+**Step 7 결과: 구현 완료** (perceptual metrics):
+- `pitch_accuracy_at_onset`: 참조 음표별 200ms 내 최근접 생성 음표의 피치 클래스 일치율
+- `rhythm_similarity`: IOI 히스토그램 코사인 유사도 (50ms 해상도)
+- `perceptual_score = 0.4*pitch_acc + 0.3*rhythm + 0.3*contour` → avg 0.537
+- 파이프라인이 인지적 멜로디 품질의 ~54% 포착
+
+**Step 8 결과: 구현 완료** (mel_strict_oct):
+- mel_strict avg=0.091, mel_strict_oct avg=0.109 → 갭 +0.018 (20% 상대적 향상)
+- 옥타브 레지스터 불일치가 mel_strict 실패의 ~18%를 설명
+- 예상보다 작은 갭 → 대부분의 피치 오류는 옥타브가 아닌 하모닉 혼동(±2-7st)
+- IRIS OUT: 가장 큰 갭(0.320→0.371, +0.051) — 옥타브 오류가 상대적으로 많은 곡
+
+**Phase 2 전체 결과 (v19_phase2_skyline.json)**:
+
+| Song | mel_strict | mel_strict_oct | perceptual | chroma | contour |
+|------|-----------|---------------|------------|--------|---------|
+| Golden | 0.028 | 0.047 | 0.461 | 0.980 | 0.749 |
+| IRIS OUT | 0.320 | 0.371 | 0.587 | 0.939 | 0.766 |
+| 꿈의 버스 | 0.052 | 0.074 | 0.536 | 0.990 | 0.767 |
+| 너에게100퍼센트 | 0.091 | 0.096 | 0.542 | 0.989 | 0.746 |
+| 달리 표현할 수 없어요 | 0.037 | 0.040 | 0.574 | 0.992 | 0.733 |
+| 등불을 지키다 | 0.050 | 0.065 | 0.556 | 0.969 | 0.821 |
+| 비비드라라러브 | 0.072 | 0.096 | 0.477 | 0.953 | 0.822 |
+| 여름이었다 | 0.075 | 0.085 | 0.565 | 0.990 | 0.734 |
+| **AVG** | **0.091** | **0.109** | **0.537** | **0.975** | **0.767** |
+
+**v19 종합 결론**:
+- Phase 1 파이프라인 개선: 전체 실패. F0 정확도(FCPE 하모닉 혼동)가 근본 병목
+- Phase 2 평가 개선: mel_strict_oct(+20%), perceptual_score(0.537) 구현 완료
+- contour reference: skyline 대비 열위, 기각
+- **mel_strict 0.091 = 현 파이프라인의 실질적 상한**. 의미있는 개선을 위해서는 F0 추출 자체의 개선(서브하모닉/하모닉 혼동 해결)이 필요
+- 향후 방향: (a) 더 나은 F0 모델 탐색, (b) perceptual_score를 보조 지표로 활용, (c) mel_strict_oct로 옥타브 보정 효과 추적
