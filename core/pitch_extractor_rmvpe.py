@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 _model = None
 _model_device = None
 
-_DEFAULT_MODEL_PATH = Path(__file__).parent.parent / "pretrained_models" / "rmvpe.pt"
+_DEFAULT_MODEL_PATH = Path(__file__).parent.parent / "models" / "rmvpe.pt"
 
 
 def _get_model(device: str):

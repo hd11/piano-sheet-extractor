@@ -1025,3 +1025,86 @@ v17 onset(음절 기반)은 노트 수는 적절하나 피치 정확도 하락(-
 - **근본 원인 재확인**: 하모닉 혼동(±2-7 semitone, 31% of errors)과 F0 subharmonic이 mel_strict 병목
 - 후처리 파라미터 단순 조정으로는 한계. F0 모델 자체 개선 필요
 - **향후 방향**: RMVPE/CREPE 앙상블 실험, 혹은 더 정밀한 보컬 특화 F0 모델 탐색
+
+### v21 Plan (2026-03-10) — 3-agent 합의 계획 (Phase A+B 순차 실행)
+
+**목표**: mel_strict 0.091 → 0.112~0.130 (Phase B 완료 시)
+**근거**: v19-v20에서 후처리 파라미터 소진. 근본 병목 해결(F0 하모닉 혼동) 방향으로 전환.
+**상세 계획**: `.omc/plans/improvement-analysis.md`
+
+**실행 순서**:
+
+#### Phase A: 저비용 선행 실험
+
+**A1. Demucs 보컬 후처리 — 곡 끝 에너지 트리밍**
+- 문제: 비비드라라러브 Boundary Overflow (곡 종료 후 122개 잡음 노트)
+- 구현: `core/vocal_separator.py`에 `_trim_trailing_silence()` 추가 (librosa RMS 에너지 기반)
+- 임계값: 최대 에너지의 -40dB 이하 구간 트리밍 + 1.0s 버퍼
+- 가드: 트리밍 후 10s 미만이면 트리밍 생략
+- 수락 기준: avg delta ≥ 0.010, IRIS OUT ≥ 0.250
+- 결과 파일: `results/v21_a1_demucs_trim.json`
+
+**A2. 보컬 bandpass filter (100~2000Hz) 단독 실험**
+- 문제: v9에서 CQT와 결합하여 실패. CQT 없이 bandpass만 단독 평가
+- 구현: Demucs 보컬 분리 후, F0 추출 전에 butterworth bandpass (100-2000Hz) 적용
+- 수락 기준: avg delta ≥ 0.010, IRIS OUT ≥ 0.250
+- 결과 파일: `results/v21_a2_bandpass.json`
+
+#### Phase B: 핵심 개선
+
+**B1. 노트 레벨 다중 모델 선택** (최고 우선순위)
+- FCPE + RMVPE 각각 독립 F0 추출 → 각각 segment_notes() → 두 노트 리스트 비교
+- 선택 기준:
+  - 일치 노트 → 채택
+  - 불일치 → **피치 분산(pitch variance)** 낮은 쪽 선택 (confidence는 binary이므로 불가)
+  - 동률 → FCPE 우선
+- 주의: FCPE/RMVPE confidence = binary(0/1), "confidence 평균" 사용 불가
+- `pipeline.py`에 `mode="multi"` 신설 (current default: "crepe")
+- 수락 기준: avg delta ≥ 0.010, IRIS OUT ≥ 0.250
+- 결과 파일: `results/v21_b1_multi_model.json`
+
+**B2. 곡별 적응형 파라미터** (B1 이후)
+- 1차 추출 통계(BPM, 노트 밀도, 음역대) → 2차 파라미터 자동 조정
+- 수락 기준: avg delta ≥ 0.010, IRIS OUT ≥ 0.250
+- 결과 파일: `results/v21_b2_adaptive.json`
+
+**가드레일**:
+- 통계적 유의성: avg delta < 0.010은 노이즈로 간주, 채택 금지 (n=8)
+- IRIS OUT 보호: 어떤 변경이든 IRIS OUT < 0.250이면 자동 기각
+- Rule 5 준수: 참조 기반 추출 결과 변환 절대 금지
+- Demucs 캐시: 모델 변경 시 캐시 키에 모델명 포함 필요
+
+**Phase A 실행 결과 (2026-03-10)**:
+
+**A1. Demucs trailing silence trimming**: **중립 → 유지**
+- 결과: mel_strict 0.091 (변화 없음)
+- 원인: 현재 파이프라인에서 비비드라라러브 trailing noise는 이미 세그멘테이션에서 필터됨. 122개 잡음 노트는 이전 onset-based segmenter 실험에서 관찰된 것으로, 현재 표준 segmenter에서는 영향 없음
+- 코드: `core/vocal_separator.py`에 `_trim_trailing_silence()` 추가 (유지 — 무해, 향후 onset segmenter 사용 시 유용)
+- 결과 파일: `results/v21_a1_demucs_trim.json`
+
+**A2. Bandpass filter (100~2000Hz)**: **기각/복구**
+- 결과: mel_strict 0.091 → 0.078 (-14.3%, 치명적 회귀)
+- 비비드라라러브: 0.072 → 0.006 (거의 0)
+- IRIS OUT: 0.323 → 0.283 (-12.4%)
+- 원인: FCPE가 내부적으로 2000Hz 이상의 배음 정보를 활용하여 기본음을 추정하는 것으로 추정. 2000Hz 컷오프가 FCPE 입력에 필요한 정보를 제거함
+- 복구: `core/pipeline.py`에서 bandpass 관련 코드 전체 제거
+- 결과 파일: `results/v21_a2_bandpass.json`
+- **교훈**: FCPE는 스펙트럼 피크 기반이 아닌 학습 기반 모델. 단순 bandpass는 FCPE 입력 특성을 손상시킴
+
+**Phase A 결론**: 두 실험 모두 의미있는 개선 없음. mel_strict 0.091 유지. Phase B(B1 노트 레벨 모델 선택)로 진행.
+
+**Phase B 실행 상태 (2026-03-10)**:
+
+**B1. 노트 레벨 다중 모델 선택**: **차단 — RMVPE 모델 불가**
+- 코드 구현 완료: `core/note_segmenter_multi.py` + `core/pipeline.py` mode="multi" 추가
+- 차단 원인: `models/rmvpe.pt` 파일이 HTML redirect(452B) — HuggingFace 네트워크 차단
+  - 참고: v16(2026-03-05)에서 정상 다운로드되어 실험 완료된 모델
+  - 현재 네트워크 환경에서 `https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/rmvpe.pt` 차단됨
+- **수동 해결 방법**: 다른 네트워크에서 RMVPE 모델(181MB) 다운로드 후 `models/rmvpe.pt`에 배치
+- 평가 명령: `python scripts/evaluate.py --mode multi --output results/v21_b1_multi_model.json`
+- 기대 효과: mel_strict +0.010~0.020 (FCPE/RMVPE 보완성 근거: 꿈의버스 RMVPE +26%, 너에게 +36%)
+
+**v21 진행 상태**:
+- Phase A 완료 (모두 중립/기각)
+- Phase B1 차단 (RMVPE 모델 다운로드 불가)
+- 다음 단계: RMVPE 모델 수동 다운로드 후 B1 평가, 또는 다른 개선 방향 탐색

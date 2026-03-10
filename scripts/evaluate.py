@@ -192,7 +192,7 @@ def main():
         "--mode",
         type=str,
         default="crepe",
-        choices=["crepe", "fcpe", "rmvpe", "ensemble", "onset", "bp"],
+        choices=["crepe", "fcpe", "rmvpe", "ensemble", "onset", "bp", "multi"],
         help="F0 extraction mode (default: crepe)",
     )
     parser.add_argument(

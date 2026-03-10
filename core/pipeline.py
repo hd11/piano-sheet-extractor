@@ -9,6 +9,7 @@ Pipeline modes:
   rmvpe:  MP3 -> Demucs -> RMVPE F0  -> note_segmenter -> postprocess -> MusicXML
   onset:  MP3 -> Demucs -> FCPE F0   -> onset_segmenter (syllable-based) -> postprocess -> MusicXML
   bp:     MP3 -> Demucs -> Basic Pitch + CQT octave correction -> postprocess -> MusicXML
+  multi:  MP3 -> Demucs -> FCPE F0 + RMVPE F0 -> note-level variance selection -> postprocess -> MusicXML
 """
 
 import logging
@@ -17,10 +18,10 @@ from typing import List, Optional
 
 import librosa
 import numpy as np
-
 from .musicxml_writer import save_musicxml
 from .note_extractor_bp import extract_notes_bp
 from .note_segmenter import segment_notes, segment_notes_quantized, segment_notes_onset, segment_notes_hybrid
+from .note_segmenter_multi import select_notes_multi_model
 from .pitch_extractor import extract_f0 as extract_f0_crepe
 from .pitch_extractor_ensemble import extract_f0_ensemble
 from .pitch_extractor_fcpe import extract_f0 as extract_f0_fcpe
@@ -99,6 +100,19 @@ def extract_melody(
         contour = extract_f0_ensemble(vocals, sr)
         logger.info("Step 4: Note segmentation")
         notes = segment_notes(contour)
+    elif mode == "multi":
+        logger.info("Step 3a: Pitch extraction (FCPE)")
+        contour_fcpe = extract_f0_fcpe(vocals, sr)
+        logger.info("Step 3b: Note segmentation (FCPE)")
+        notes_fcpe = segment_notes(contour_fcpe)
+        logger.info("Step 3c: Pitch extraction (RMVPE)")
+        contour_rmvpe = extract_f0_rmvpe(vocals, sr)
+        logger.info("Step 3d: Note segmentation (RMVPE)")
+        notes_rmvpe = segment_notes(contour_rmvpe)
+        logger.info("Step 4: Note-level multi-model selection (pitch variance)")
+        notes = select_notes_multi_model(
+            notes_fcpe, contour_fcpe, notes_rmvpe, contour_rmvpe, priority_model="a"
+        )
     else:
         logger.info("Step 3: Pitch extraction (CREPE)")
         contour = extract_f0_crepe(vocals, sr)

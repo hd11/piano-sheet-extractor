@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Optional, Tuple
 
+import librosa
 import numpy as np
 import torch
 
@@ -22,6 +23,75 @@ _model = None
 
 VOCALS_CACHE_VERSION = "v1"
 SAMPLE_RATE = 44100
+
+
+def _trim_trailing_silence(
+    vocals: np.ndarray,
+    sr: int,
+    frame_length: int = 2048,
+    hop_length: int = 512,
+    relative_threshold: float = 1e-4,
+    buffer_seconds: float = 1.0,
+    min_duration_seconds: float = 10.0,
+) -> np.ndarray:
+    """Trim trailing silence from a vocals array using energy envelope.
+
+    Computes short-time RMS energy, finds the last frame above a threshold
+    relative to the peak energy, adds a buffer, and trims the array.
+
+    Args:
+        vocals: 1-D mono float32 array at sample rate sr.
+        sr: Sample rate in Hz.
+        frame_length: RMS frame length in samples.
+        hop_length: Hop length in samples.
+        relative_threshold: Energy threshold as fraction of peak energy (-40 dB).
+        buffer_seconds: Seconds to keep after the last active frame.
+        min_duration_seconds: Skip trimming if result would be shorter than this.
+
+    Returns:
+        Trimmed (or original) vocals array.
+    """
+    original_dur = len(vocals) / sr
+
+    rms = librosa.feature.rms(
+        y=vocals, frame_length=frame_length, hop_length=hop_length
+    )[0]
+
+    peak_energy = float(rms.max())
+    if peak_energy == 0.0:
+        return vocals
+
+    threshold = peak_energy * relative_threshold
+    active_frames = np.where(rms > threshold)[0]
+
+    if len(active_frames) == 0:
+        return vocals
+
+    last_active_frame = int(active_frames[-1])
+    # Convert frame index to sample index, add buffer
+    last_active_sample = last_active_frame * hop_length + frame_length
+    buffer_samples = int(buffer_seconds * sr)
+    trim_sample = last_active_sample + buffer_samples
+
+    if trim_sample >= len(vocals):
+        return vocals
+
+    trimmed_dur = trim_sample / sr
+    if trimmed_dur < min_duration_seconds:
+        logger.warning(
+            "Trailing silence trim skipped: result would be %.1fs (< %.1fs min)",
+            trimmed_dur,
+            min_duration_seconds,
+        )
+        return vocals
+
+    logger.info(
+        "Trimmed trailing silence: %.1fs -> %.1fs (removed %.1fs)",
+        original_dur,
+        trimmed_dur,
+        original_dur - trimmed_dur,
+    )
+    return vocals[:trim_sample]
 
 
 def _get_model():
@@ -79,7 +149,8 @@ def separate_vocals(
         if cached_path.exists() and cached_path.stat().st_size > 0:
             logger.info("Cache HIT: %s -> %s", mp3_path.name, cached_path.name)
             data = np.load(cached_path)
-            return data["vocals"], int(data["sr"])
+            vocals_cached = _trim_trailing_silence(data["vocals"], int(data["sr"]))
+            return vocals_cached, int(data["sr"])
 
         logger.info("Cache MISS: %s (hash=%s)", mp3_path.name, md5_hash)
 
@@ -137,4 +208,5 @@ def separate_vocals(
             cached_path.stat().st_size / 1e6,
         )
 
+    vocals_np = _trim_trailing_silence(vocals_np, SAMPLE_RATE)
     return vocals_np, SAMPLE_RATE
